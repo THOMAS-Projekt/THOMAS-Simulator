@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=THOMAS-Simulator
+Comment=Simuliert die Steuerungsalgorithmen von THOMAS
+GenericName=thomas-simulator
+Exec=thomas-simulator %U
+Icon=thomas-viewer
+Terminal=false
+Categories=Network;
