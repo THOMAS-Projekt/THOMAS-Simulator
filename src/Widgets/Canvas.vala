@@ -98,5 +98,12 @@ public class Simulator.Widgets.Canvas : Gtk.DrawingArea {
         context.line_to (0, 10);
         context.line_to (10, -10);
         context.stroke ();
+
+        context.rotate (-robot.direction);
+
+        context.move_to (field_width * 0.8, field_width * 0.8);
+        context.show_text ("x=%f, y=%f, r=%f".printf (robot.position_x, robot.position_y, robot.direction));
+
+        context.restore ();
     }
 }

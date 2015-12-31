@@ -49,7 +49,7 @@ public class Simulator.Backend.Robot : Object {
             return true;
         });
 
-        //accelerate_to_motor_speed (256);
+        accelerate_to_motor_speed (256);
     }
 
     public void set_motor_speed (short speed) {
