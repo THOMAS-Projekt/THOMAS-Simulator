@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 THOMAS-Projekt (https://thomas-projekt.de)
+ * Copyright (c) 2011-2016 THOMAS-Projekt (https://thomas-projekt.de)
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public
@@ -21,6 +21,9 @@
 
 public class Simulator.Backend.Robot : Object {
     private static const short MAX_ACCELERATION = 15;
+    private static const bool USE_INACCURACY = true;
+
+    public Room room { private get; construct; }
 
     public double position_x { get; private set; default = 2; }
     public double position_y { get; private set; default = 2; }
@@ -30,13 +33,16 @@ public class Simulator.Backend.Robot : Object {
     public short current_speed { get; private set; default = 0; }
     public short wanted_speed { get; private set; default = 0; }
 
+    public Gee.HashMap<uint8, double? >? last_scan { get; private set; default = null; }
+
     private uint accelerate_timer_id = 0;
 
     private Timer last_recalculation_timer;
 
     public signal void changed ();
 
-    public Robot () {
+    public Robot (Room room) {
+        Object (room : room);
         last_recalculation_timer = new Timer ();
 
         Timeout.add (40, () => {
@@ -50,10 +56,22 @@ public class Simulator.Backend.Robot : Object {
         });
 
         accelerate_to_motor_speed (256);
+        Timeout.add (300, () => {
+            do_scan ();
+
+            return true;
+        });
     }
 
     public void set_motor_speed (short speed) {
-        current_speed = wanted_speed = (speed > 255 ? 255 : speed < -255 ? -255 : speed);
+        wanted_speed = (speed > 255 ? 255 : speed < -255 ? -255 : speed);
+
+        /* Künstliche Ungenauigkeit */
+        if (USE_INACCURACY) {
+            wanted_speed += (short)Random.int_range (-30, 10);
+        }
+
+        current_speed = wanted_speed;
     }
 
     public void accelerate_to_motor_speed (short speed) {
@@ -63,9 +81,37 @@ public class Simulator.Backend.Robot : Object {
 
         wanted_speed = (speed > 255 ? 255 : speed < -255 ? -255 : speed);
 
+        /* Künstliche Ungenauigkeit */
+        if (USE_INACCURACY) {
+            wanted_speed += (short)Random.int_range (-30, 10);
+        }
+
         recalculate_motor_speed ();
 
         accelerate_timer_id = Timeout.add (100, recalculate_motor_speed);
+    }
+
+    public Gee.HashMap<uint8, double? > do_scan () {
+        Gee.HashMap<uint8, double? > distances = new Gee.HashMap<uint8, double? > ();
+
+        for (uint8 angle = 0; angle < 180; angle += 2) {
+            double distance = room.get_distance (position_x, position_y, ((Math.PI / 180) * (angle - 90)) - direction);
+
+            /* Künstliche Ungenauigkeit */
+            if (USE_INACCURACY) {
+                distance += Random.double_range (-0.5, 0.7);
+            }
+
+            if (distance < 0) {
+                distance = 0;
+            }
+
+            distances.@set (angle, distance);
+        }
+
+        last_scan = distances;
+
+        return distances;
     }
 
     private bool recalculate_motor_speed () {

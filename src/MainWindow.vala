@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 THOMAS-Projekt (https://thomas-projekt.de)
+ * Copyright (c) 2011-2016 THOMAS-Projekt (https://thomas-projekt.de)
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public
@@ -33,7 +33,7 @@ public class Simulator.MainWindow : Gtk.Window {
         this.set_application (application);
 
         room = new Backend.Room ();
-        robot = new Backend.Robot ();
+        robot = new Backend.Robot (room);
 
         build_ui ();
         connect_signals ();

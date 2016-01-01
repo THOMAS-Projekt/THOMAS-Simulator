@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 THOMAS-Projekt (https://thomas-projekt.de)
+ * Copyright (c) 2011-2016 THOMAS-Projekt (https://thomas-projekt.de)
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public
@@ -69,6 +69,7 @@ public class Simulator.Widgets.Canvas : Gtk.DrawingArea {
 
         draw_room (context);
         draw_robot (context);
+        draw_last_scan (context);
 
         return true;
     }
@@ -105,5 +106,30 @@ public class Simulator.Widgets.Canvas : Gtk.DrawingArea {
         context.show_text ("x=%f, y=%f, r=%f".printf (robot.position_x, robot.position_y, robot.direction));
 
         context.restore ();
+    }
+
+    private void draw_last_scan (Cairo.Context context) {
+        if (robot.last_scan == null) {
+            return;
+        }
+
+        context.translate (robot.position_x * field_width, robot.position_y * field_height);
+        context.set_source_rgba (0, 0, 0, 0.3);
+
+        robot.last_scan.@foreach ((entry) => {
+            double angle = ((Math.PI / 180) * (entry.key - 90)) - robot.direction;
+            double distance = entry.value;
+
+            double target_position_x = Math.sin (angle) * distance * field_width;
+            double target_position_y = Math.cos (angle) * distance * field_height;
+
+            context.move_to (0, 0);
+            context.line_to (target_position_x, target_position_y);
+            context.stroke ();
+            context.arc (target_position_x, target_position_y, 3, 0, 2 * Math.PI);
+            context.fill ();
+
+            return true;
+        });
     }
 }

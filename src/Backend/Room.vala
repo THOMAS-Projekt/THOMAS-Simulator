@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 THOMAS-Projekt (https://thomas-projekt.de)
+ * Copyright (c) 2011-2016 THOMAS-Projekt (https://thomas-projekt.de)
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public
@@ -20,6 +20,8 @@
  */
 
 public class Simulator.Backend.Room : Object {
+    private static const double DISTANCE_MEASSUREMENT_STEP = 0.05;
+
     private uint8[, ] wall_grid = {
         { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 },
         { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 },
@@ -48,5 +50,23 @@ public class Simulator.Backend.Room : Object {
 
     public uint8[, ] get_wall_grid () {
         return wall_grid;
+    }
+
+    public double get_distance (double position_x, double position_y, double angle) {
+        double max_diagonal = Math.sqrt (Math.pow (get_width (), 2) + Math.pow (get_height (), 2));
+
+        double sin_angle = Math.sin (angle);
+        double cos_angle = Math.cos (angle);
+
+        for (double i = 0; i < max_diagonal; i += DISTANCE_MEASSUREMENT_STEP) {
+            int x = (int)(position_x + (sin_angle * i));
+            int y = (int)(position_y + (cos_angle * i));
+
+            if (wall_grid[y, x] == 1) {
+                return i;
+            }
+        }
+
+        return max_diagonal;
     }
 }
