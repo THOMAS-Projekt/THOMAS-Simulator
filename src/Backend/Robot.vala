@@ -58,32 +58,24 @@ public class Simulator.Backend.Robot : Object {
 
             return true;
         });
-
-        accelerate_to_motor_speed (256);
-        set_motor_turning_speed (-30);
-        Timeout.add (30, () => {
-            do_scan ();
-
-            return true;
-        });
     }
 
     public void set_motor_speed (short speed) {
-        wanted_speed = (speed > 255 ? 255 : speed < -255 ? -255 : speed);
+        short new_speed = (speed > 255 ? 255 : speed < -255 ? -255 : speed);
 
         /* Künstliche Ungenauigkeit */
-        if (USE_INACCURACY) {
-            wanted_speed += (short)Random.int_range (-30, 10);
+        if (USE_INACCURACY && new_speed.abs () > 50) {
+            new_speed += (short)Random.int_range (-30, 10);
         }
 
-        current_speed = wanted_speed;
+        current_speed = wanted_speed = new_speed;
     }
 
     public void set_motor_turning_speed (short speed) {
         short new_speed = (speed > 255 ? 255 : speed < -255 ? -255 : speed);
 
         /* Künstliche Ungenauigkeit */
-        if (USE_INACCURACY) {
+        if (USE_INACCURACY && new_speed.abs () > 50) {
             new_speed += (short)Random.int_range (-30, 10);
         }
 
@@ -95,12 +87,14 @@ public class Simulator.Backend.Robot : Object {
             Source.remove (accelerate_timer_id);
         }
 
-        wanted_speed = (speed > 255 ? 255 : speed < -255 ? -255 : speed);
+        short new_speed = (speed > 255 ? 255 : speed < -255 ? -255 : speed);
 
         /* Künstliche Ungenauigkeit */
-        if (USE_INACCURACY) {
-            wanted_speed += (short)Random.int_range (-30, 10);
+        if (USE_INACCURACY && new_speed.abs () > 50) {
+            new_speed += (short)Random.int_range (-30, 10);
         }
+
+        wanted_speed = new_speed;
 
         recalculate_motor_speed ();
 
@@ -143,6 +137,7 @@ public class Simulator.Backend.Robot : Object {
             short acceleration_sign = (wanted_speed > current_speed ? 1 : -1);
 
             current_speed += (pending_difference > MAX_ACCELERATION ? MAX_ACCELERATION : pending_difference) * acceleration_sign;
+            debug (current_speed.to_string ());
 
             return true;
         }

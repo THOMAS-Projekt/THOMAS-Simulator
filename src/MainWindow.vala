@@ -23,17 +23,55 @@ public class Simulator.MainWindow : Gtk.Window {
     private Backend.Room room;
     private Backend.Robot robot;
 
+    private Backend.MappingAlgorithm algorithm;
+
     private Gtk.HeaderBar header_bar;
 
     private Gtk.Box main_box;
 
     private Widgets.Canvas canvas;
 
+    private int map_id = 0;
+
     public MainWindow (Simulator.Application application) {
         this.set_application (application);
 
         room = new Backend.Room ();
         robot = new Backend.Robot (room);
+
+        algorithm = new Backend.MappingAlgorithm ((speed, duration) => {
+            robot.accelerate_to_motor_speed (speed);
+
+            Timeout.add (duration, () => {
+                robot.accelerate_to_motor_speed (0);
+
+                return false;
+            });
+        }, (speed, duration) => {
+            robot.set_motor_turning_speed (speed);
+
+            Timeout.add (duration, () => {
+                robot.set_motor_turning_speed (0);
+
+                return false;
+            });
+        }, () => {
+            map_id++;
+
+            Idle.add (() => {
+                robot.do_scan ().@foreach ((entry) => {
+                    algorithm.handle_map_scan_continued (map_id, entry.key, (uint16)(entry.@value * 30));
+
+                    return true;
+                });
+
+                algorithm.handle_map_scan_finished (map_id);
+
+                return false;
+            });
+
+            return map_id;
+        });
 
         build_ui ();
         connect_signals ();

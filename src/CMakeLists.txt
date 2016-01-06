@@ -7,6 +7,7 @@ vala_precompile (VALA_C
     Widgets/Canvas.vala
     Backend/Room.vala
     Backend/Robot.vala
+    Backend/MappingAlgorithm.vala
 PACKAGES
     gtk+-3.0
     gio-2.0
