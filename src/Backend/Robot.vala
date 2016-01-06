@@ -33,6 +33,8 @@ public class Simulator.Backend.Robot : Object {
     public short current_speed { get; private set; default = 0; }
     public short wanted_speed { get; private set; default = 0; }
 
+    public double turning_speed { get; private set; default = 0; }
+
     public Gee.HashMap<uint8, double? >? last_scan { get; private set; default = null; }
 
     private uint accelerate_timer_id = 0;
@@ -46,6 +48,8 @@ public class Simulator.Backend.Robot : Object {
         last_recalculation_timer = new Timer ();
 
         Timeout.add (40, () => {
+            direction += turning_speed;
+
             double real_speed = ((double)current_speed / 256) * 0.05;
             position_x -= Math.sin (direction) * real_speed;
             position_y += Math.cos (direction) * real_speed;
@@ -56,7 +60,8 @@ public class Simulator.Backend.Robot : Object {
         });
 
         accelerate_to_motor_speed (256);
-        Timeout.add (300, () => {
+        set_motor_turning_speed (-30);
+        Timeout.add (30, () => {
             do_scan ();
 
             return true;
@@ -72,6 +77,17 @@ public class Simulator.Backend.Robot : Object {
         }
 
         current_speed = wanted_speed;
+    }
+
+    public void set_motor_turning_speed (short speed) {
+        short new_speed = (speed > 255 ? 255 : speed < -255 ? -255 : speed);
+
+        /* Künstliche Ungenauigkeit */
+        if (USE_INACCURACY) {
+            new_speed += (short)Random.int_range (-30, 10);
+        }
+
+        turning_speed = ((double)new_speed / 256) / 8;
     }
 
     public void accelerate_to_motor_speed (short speed) {
