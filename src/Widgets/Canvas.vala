@@ -20,8 +20,11 @@
  */
 
 public class Simulator.Widgets.Canvas : Gtk.DrawingArea {
+    private static const int PIXEL_PER_FIELD = 60;
+
     public Backend.Room room { private get; construct; }
     public Backend.Robot robot { private get; construct; }
+    public Backend.MappingAlgorithm algorithm { private get; construct; }
 
     private double room_width;
     private double room_height;
@@ -32,8 +35,8 @@ public class Simulator.Widgets.Canvas : Gtk.DrawingArea {
     private double field_width;
     private double field_height;
 
-    public Canvas (Backend.Room room, Backend.Robot robot) {
-        Object (room: room, robot: robot);
+    public Canvas (Backend.Room room, Backend.Robot robot, Backend.MappingAlgorithm algorithm) {
+        Object (room: room, robot: robot, algorithm: algorithm);
 
         room_width = room.get_width ();
         room_height = room.get_height ();
@@ -43,7 +46,7 @@ public class Simulator.Widgets.Canvas : Gtk.DrawingArea {
     }
 
     private void request_size () {
-        this.set_size_request (room.get_width () * 60, room.get_height () * 60);
+        this.set_size_request (room.get_width () * PIXEL_PER_FIELD, room.get_height () * PIXEL_PER_FIELD);
     }
 
     private void connect_signals () {
@@ -70,6 +73,7 @@ public class Simulator.Widgets.Canvas : Gtk.DrawingArea {
         draw_room (context);
         draw_robot (context);
         draw_last_scan (context);
+        draw_last_detected_walls (context);
 
         return true;
     }
@@ -103,7 +107,7 @@ public class Simulator.Widgets.Canvas : Gtk.DrawingArea {
         context.rotate (-robot.direction);
 
         context.move_to (field_width * 0.8, field_width * 0.8);
-        context.show_text ("x=%f, y=%f, r=%f".printf (robot.position_x, robot.position_y, robot.direction));
+        context.show_text ("x=%f, y=%f, r=%f".printf (robot.position_x, robot.position_y, robot.direction % (2 * Math.PI)));
 
         context.restore ();
     }
@@ -131,5 +135,25 @@ public class Simulator.Widgets.Canvas : Gtk.DrawingArea {
 
             return true;
         });
+
+        context.restore ();
+    }
+
+    private void draw_last_detected_walls (Cairo.Context context) {
+        if (algorithm.last_detected_walls == null) {
+            return;
+        }
+
+        context.translate (robot.position_x * field_width, robot.position_y * field_height);
+        context.rotate (robot.direction);
+        context.set_source_rgba (1, 0, 0, 1);
+        context.set_line_width (3);
+
+        foreach (Backend.MappingAlgorithm.Wall wall in algorithm.last_detected_walls) {
+            context.move_to (((double)wall.relative_start_x / 30) * field_width, ((double)wall.relative_start_y / 30) * field_width);
+            context.line_to (((double)wall.relative_end_x / 30) * field_width, ((double)wall.relative_end_y / 30) * field_width);
+
+            context.stroke ();
+        }
     }
 }

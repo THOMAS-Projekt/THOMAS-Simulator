@@ -87,7 +87,7 @@ public class Simulator.MainWindow : Gtk.Window {
 
         main_box = new Gtk.Box (Gtk.Orientation.VERTICAL, 0);
 
-        canvas = new Widgets.Canvas (room, robot);
+        canvas = new Widgets.Canvas (room, robot, algorithm);
 
         main_box.pack_start (canvas);
 

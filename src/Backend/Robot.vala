@@ -35,7 +35,7 @@ public class Simulator.Backend.Robot : Object {
 
     public double turning_speed { get; private set; default = 0; }
 
-    public Gee.HashMap<uint8, double? >? last_scan { get; private set; default = null; }
+    public Gee.TreeMap<uint8, double? >? last_scan { get; private set; default = null; }
 
     private uint accelerate_timer_id = 0;
 
@@ -58,6 +58,7 @@ public class Simulator.Backend.Robot : Object {
 
             return true;
         });
+        set_motor_turning_speed (-30);
     }
 
     public void set_motor_speed (short speed) {
@@ -101,15 +102,15 @@ public class Simulator.Backend.Robot : Object {
         accelerate_timer_id = Timeout.add (100, recalculate_motor_speed);
     }
 
-    public Gee.HashMap<uint8, double? > do_scan () {
-        Gee.HashMap<uint8, double? > distances = new Gee.HashMap<uint8, double? > ();
+    public Gee.TreeMap<uint8, double? > do_scan () {
+        Gee.TreeMap<uint8, double? > distances = new Gee.TreeMap<uint8, double? > ();
 
         for (uint8 angle = 0; angle < 180; angle += 2) {
             double distance = room.get_distance (position_x, position_y, ((Math.PI / 180) * (angle - 90)) - direction);
 
             /* Künstliche Ungenauigkeit */
             if (USE_INACCURACY) {
-                distance += Random.double_range (-0.5, 0.7);
+                distance += Random.double_range (-distance / 30, distance / 20);
             }
 
             if (distance < 0) {

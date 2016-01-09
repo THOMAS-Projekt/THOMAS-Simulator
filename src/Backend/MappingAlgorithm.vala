@@ -28,6 +28,223 @@
  * Dieser Algorithmus wurde im Rahmen der Facharbeit von Marcus Wichelmann entwickelt und dokumentiert.
  */
 public class Simulator.Backend.MappingAlgorithm : Object {
+    /* Der maximale erlaubte Abstand zwischen den Auftrittspunkten der Messwerte, damit eine Wand erkannt wird */
+    private static const int WALL_MAX_DISTANCE_GAP = 50;
+
+    /* Die maximale erlaubte Richtungsdifferenz zwischen den Auftrittspunkten der Messwerte, damit eine Wand erkannt wird */
+    private static const double WALL_MAX_DIRECTION_GAP = (Math.PI / 180) * 3;
+
+    /* Konvertiert Grad in Bogemmaß */
+    private static double deg_to_rad (uint8 degree) {
+        return ((Math.PI / 180) * degree);
+    }
+
+    /* Berechnet den Durschnittswert aus einem Array aus Fließkommazahlen */
+    private static double double_avg (double[] values) {
+        /* Teilung durch null verhindern */
+        if (values.length == 0) {
+            return 0;
+        }
+
+        /* Die Summe aller Fließkommazahlen */
+        double sum = 0;
+
+        /* Alle Zahlen aufaddieren */
+        foreach (double @value in values) {
+            sum += @value;
+        }
+
+        /* Durchschnittswert berechnen */
+        return sum / values.length;
+    }
+
+    /* Sucht in den Messwerten nach regelmäßigkeiten und interpretiert diese als Wände */
+    private static Wall[] detect_walls (Gee.TreeMap<double? , uint16> distances) {
+        /* Liste der erkannten Wände */
+        Wall[] walls = {};
+
+        /* Der Winkel des Startpunktes der Wand */
+        double wall_start_angle = -1;
+
+        /* Die Koordinaten des Startpunktes der Wand */
+        int wall_start_position_x = 0;
+        int wall_start_position_y = 0;
+
+        /* Der letzte überprüfte Winkel */
+        double last_angle = -1;
+
+        /* Die Koordinaten des letzten überprüften Messwertes */
+        int last_position_x = 0;
+        int last_position_y = 0;
+
+        /* Liste der letzten Wandrichtungen */
+        double[] last_directions = {};
+
+        /* Alle Messwerte durchlaufen */
+        distances.@foreach ((entry) => {
+            /* Infos zum Messwert abrufen */
+            double angle = entry.key;
+            uint16 distance = entry.@value;
+
+            /* Auftrittspunkt des Messwertes bestimmen */
+            int position_x = (int)(Math.sin (angle - (Math.PI / 2)) * distance);
+            int position_y = (int)(Math.cos (angle - (Math.PI / 2)) * distance);
+
+            /* Prüfen, ob dies der erste Messwert ist */
+            if (last_angle >= 0) {
+                /* Den Abstand zu den Koordinaten des letzten Auftrittspunktes berechnen */
+                int distance_gap = (int)(Math.sqrt (Math.pow (position_x - last_position_x, 2) + Math.pow (position_y - last_position_y, 2)));
+
+                /* Bewegt sich der Abstand innerhalb der Parameter? */
+                if (distance_gap < WALL_MAX_DISTANCE_GAP) {
+                    /* Wurde bereits eine Wand begonnen? */
+                    if (wall_start_angle < 0) {
+                        /* Startwinkel der neuen Wand merken */
+                        wall_start_angle = last_angle;
+
+                        /* Startkoordinaten der neuen Wand merken */
+                        wall_start_position_x = last_position_x;
+                        wall_start_position_y = last_position_y;
+                    } else {
+                        /* Wandrichtung berechnen */
+                        double direction = Math.atan ((double)(position_y - wall_start_position_y) / (double)(position_x - wall_start_position_x));
+
+                        /* Wurde bereits mindestens eine vorherige Wandrichtung erfasst? */
+                        if (last_directions.length > 0) {
+                            /* Durchschnittswert der letzten Wandrichtungen berechnen */
+                            double avg_direction = double_avg (last_directions);
+
+                            /* Falls die vorherige Wandrichtung bekannt ist, Differenz überprüfen */
+                            if (Math.fabs (direction - avg_direction) > WALL_MAX_DIRECTION_GAP) {
+                                /* Länge der Wand mit dem Satz des Pythagoras berechnen */
+                                int wall_length = (int)(Math.sqrt (Math.pow (last_position_x - wall_start_position_x, 2) + Math.pow (last_position_y - wall_start_position_y, 2)));
+
+                                /* Neue Struktur, die die Wand beschreibt, anlegen */
+                                Wall wall = { wall_start_position_x,
+                                              wall_start_position_y,
+                                              last_position_x,
+                                              last_position_y,
+                                              wall_length,
+                                              last_directions[last_directions.length - 1] };
+
+                                /* Wand zur Liste hinzufügen */
+                                walls += wall;
+
+                                /* Die Wand ist hier zu Ende */
+                                wall_start_angle = -1;
+
+                                /* Liste der Wandrichtungen zurücksetzen */
+                                last_directions = {};
+                            } else {
+                                /* Richtung merken */
+                                last_directions += direction;
+                            }
+                        } else {
+                            /* Richtung merken */
+                            last_directions += direction;
+                        }
+                    }
+                } else {
+                    /* Wurde bereits eine Wand begonnen? */
+                    if (wall_start_angle >= 0) {
+                        /* Länge der Wand mit dem Satz des Pythagoras berechnen */
+                        int wall_length = (int)(Math.sqrt (Math.pow (last_position_x - wall_start_position_x, 2) + Math.pow (last_position_y - wall_start_position_y, 2)));
+
+                        /* Die letzte Richtung */
+                        double last_direction;
+
+                        /* Prüfen, ob die letze Richtung aus der Richtungsliste abgerufen werden kann */
+                        if (last_directions.length > 0) {
+                            /* Richtung aus Liste auslesen */
+                            last_direction = last_directions[last_directions.length - 1];
+                        } else {
+                            if (last_position_x == wall_start_position_x) {
+                                /* Richtung anhand der aktuellen Position bestimmen */
+                                last_direction = Math.atan ((double)(position_y - wall_start_position_y) / (double)(position_x - wall_start_position_x));
+                            } else {
+                                /* Richtung anhand der letzten Position bestimmen */
+                                last_direction = Math.atan ((double)(last_position_y - wall_start_position_y) / (double)(last_position_x - wall_start_position_x));
+                            }
+                        }
+
+                        /* Neue Struktur, die die Wand beschreibt, anlegen */
+                        Wall wall = { wall_start_position_x,
+                                      wall_start_position_y,
+                                      last_position_x,
+                                      last_position_y,
+                                      wall_length,
+                                      last_direction };
+
+                        /* Wand zur Liste hinzufügen */
+                        walls += wall;
+                    }
+
+                    /* Dies ist kein Startpunkt einer neuen Wand*/
+                    wall_start_angle = -1;
+                }
+            }
+
+            /* Winkel merken */
+            last_angle = angle;
+
+            /* Koordinaten merken */
+            last_position_x = position_x;
+            last_position_y = position_y;
+
+            /* Messwerte weiter durchlaufen */
+            return true;
+        });
+
+        /* Wurde die letzte Wand schon beendet? */
+        if (wall_start_angle >= 0) {
+            /* Länge der Wand mit dem Satz des Pythagoras berechnen */
+            int wall_length = (int)(Math.sqrt (Math.pow (last_position_x - wall_start_position_x, 2) + Math.pow (last_position_y - wall_start_position_y, 2)));
+
+            /* Die letzte Richtung */
+            double last_direction;
+
+            /* Prüfen, ob die letze Richtung aus der Richtungsliste abgerufen werden kann */
+            if (last_directions.length > 0) {
+                /* Richtung aus Liste auslesen */
+                last_direction = last_directions[last_directions.length - 1];
+            } else {
+                /* Die Wand ist dann wohl ohnehin äußerst kurz, die können wir einfach ignorieren */
+                return walls;
+            }
+
+            /* Neue Struktur, die die Wand beschreibt, anlegen */
+            Wall wall = { wall_start_position_x,
+                          wall_start_position_y,
+                          last_position_x,
+                          last_position_y,
+                          wall_length,
+                          last_direction };
+
+            /* Wand zur Liste hinzufügen */
+            walls += wall;
+        }
+
+        /* Liste der Wände zurückgeben */
+        return walls;
+    }
+
+    /* Stellt eine automatisch erkannte Wand dar */
+    public struct Wall {
+        /* Relative Koordinaten des Startpunktes */
+        int relative_start_x;
+        int relative_start_y;
+
+        /* Relative Koordinaten des Enpunktes */
+        int relative_end_x;
+        int relative_end_y;
+
+        /* Länge der wand */
+        int wall_length;
+
+        /* Relative Richtung der Wand (bezogen auf die Drehrichtung des Roboters) */
+        double relative_direction;
+    }
+
     /* Spiegelt die Funktionen zum Steuern des Roboters wieder */
     public delegate void MoveFunc (short speed, uint duration);
     public delegate void TurnFunc (short speed, uint duration);
@@ -42,19 +259,49 @@ public class Simulator.Backend.MappingAlgorithm : Object {
     /* Zeit auf eine Funktion zum Beginn eines neuen Scanvorganges */
     public unowned StartNewScanFunc start_new_scan { private get; private set; }
 
+    /* Zuletzt erkannte Wandliste */
+    public Wall[]? last_detected_walls { get; private set; default = null; }
+
+    /* Speichert die Distanzwerte des momentanen Scanvorganges */
+    private Gee.TreeMap<double? , uint16> current_scan;
+
     /* Der Konstruktor der Klasse, hier sollten die nötigen Funktionen zur Kontrolle des Roboters übergeben werden */
     public MappingAlgorithm (MoveFunc move_func, TurnFunc turn_func, StartNewScanFunc start_new_scan_func) {
         /* Funktionen global zuweisen */
         this.move = move_func;
         this.turn = turn_func;
         this.start_new_scan = start_new_scan_func;
+
+        /* Erste Messreihe beginnen */
+        current_scan = new Gee.TreeMap<double? , uint16> ();
+
+        /* Zunächst einmal die momentane Umgebung scannen */
+        start_new_scan ();
     }
 
     /* Sollte aufgerufen werden, wenn eine weitere durchschnittliche Distanz einer Karte erfasst wurde */
     public void handle_map_scan_continued (int map_id, uint8 angle, uint16 avg_distance) {
+        /* Wir setzen hier vorraus, dass immer nur eine Map gleichzeitig aufgenommen wird. */
+
+        /*
+         * Distanzwert zum Scan hinzufügen
+         * Winkel werden im weiteren Verlauf als Bogenmaß verwendet, daher schon hier konvertieren
+         */
+        current_scan.@set (deg_to_rad (angle), avg_distance);
     }
 
     /* Sollte aufgerufen werden, wenn der Scanvorgang einer Karte abgeschlossen wurde */
     public void handle_map_scan_finished (int map_id) {
+        /* Wände anhand der Messdaten detektieren */
+        Wall[] walls = detect_walls (current_scan);
+
+        /* Wände speichern, damit sie extern abgerufen werden können */
+        last_detected_walls = walls;
+
+        /* Neue Messreihe beginnen */
+        current_scan = new Gee.TreeMap<double? , uint16> ();
+
+        /* Neuen Scanvorgang einleiten */
+        start_new_scan ();
     }
 }
