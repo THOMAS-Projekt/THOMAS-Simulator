@@ -29,10 +29,10 @@
  */
 public class Simulator.Backend.MappingAlgorithm : Object {
     /* Der maximale erlaubte Abstand zwischen den Auftrittspunkten der Messwerte, damit eine Wand erkannt wird */
-    private static const int WALL_MAX_DISTANCE_GAP = 50;
+    private static const int WALL_MAX_DISTANCE_GAP = 60;
 
     /* Die maximale erlaubte Richtungsdifferenz zwischen den Auftrittspunkten der Messwerte, damit eine Wand erkannt wird */
-    private static const double WALL_MAX_DIRECTION_GAP = (Math.PI / 180) * 3;
+    private static const double WALL_MAX_DIRECTION_GAP = (Math.PI / 180) * 40;
 
     /* Konvertiert Grad in Bogemmaß */
     private static double deg_to_rad (uint8 degree) {
@@ -106,13 +106,13 @@ public class Simulator.Backend.MappingAlgorithm : Object {
                         wall_start_position_x = last_position_x;
                         wall_start_position_y = last_position_y;
                     } else {
-                        /* Wandrichtung berechnen */
-                        double direction = Math.atan ((double)(position_y - wall_start_position_y) / (double)(position_x - wall_start_position_x));
-
                         /* Wurde bereits mindestens eine vorherige Wandrichtung erfasst? */
-                        if (last_directions.length > 0) {
-                            /* Durchschnittswert der letzten Wandrichtungen berechnen */
-                            double avg_direction = double_avg (last_directions);
+                        if (last_directions.length > 2) {
+                            /* Wandrichtung bezogen auf den vorherigen Punkt bestimmen */
+                            double direction = Math.atan ((double)(position_y - last_position_y) / (double)(position_x - last_position_x));
+
+                            /* Durchschnittswert der vorherigen paar Wandrichtungen berechnen */
+                            double avg_direction = double_avg (last_directions[(last_directions.length > 8 ? last_directions.length - 8 : 0) : last_directions.length - 2]);
 
                             /* Falls die vorherige Wandrichtung bekannt ist, Differenz überprüfen */
                             if (Math.fabs (direction - avg_direction) > WALL_MAX_DIRECTION_GAP) {
@@ -140,8 +140,8 @@ public class Simulator.Backend.MappingAlgorithm : Object {
                                 last_directions += direction;
                             }
                         } else {
-                            /* Richtung merken */
-                            last_directions += direction;
+                            /* Richtung bezogen auf den Startpunkt merken */
+                            last_directions += Math.atan ((double)(position_y - wall_start_position_y) / (double)(position_x - wall_start_position_x));
                         }
                     }
                 } else {
