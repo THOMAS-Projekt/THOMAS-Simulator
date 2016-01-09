@@ -106,7 +106,7 @@ public class Simulator.Backend.MappingAlgorithm : Object {
                         wall_start_position_x = last_position_x;
                         wall_start_position_y = last_position_y;
                     } else {
-                        /* Wurde bereits mindestens eine vorherige Wandrichtung erfasst? */
+                        /* Wurde bereits ein paar vorherige Wandrichtungen erfasst? */
                         if (last_directions.length > 2) {
                             /* Wandrichtung bezogen auf den vorherigen Punkt bestimmen */
                             double direction = Math.atan ((double)(position_y - last_position_y) / (double)(position_x - last_position_x));
@@ -120,8 +120,10 @@ public class Simulator.Backend.MappingAlgorithm : Object {
                                 int wall_length = (int)(Math.sqrt (Math.pow (last_position_x - wall_start_position_x, 2) + Math.pow (last_position_y - wall_start_position_y, 2)));
 
                                 /* Neue Struktur, die die Wand beschreibt, anlegen */
-                                Wall wall = { wall_start_position_x,
+                                Wall wall = { wall_start_angle,
+                                              wall_start_position_x,
                                               wall_start_position_y,
+                                              last_angle,
                                               last_position_x,
                                               last_position_y,
                                               wall_length,
@@ -168,8 +170,10 @@ public class Simulator.Backend.MappingAlgorithm : Object {
                         }
 
                         /* Neue Struktur, die die Wand beschreibt, anlegen */
-                        Wall wall = { wall_start_position_x,
+                        Wall wall = { wall_start_angle,
+                                      wall_start_position_x,
                                       wall_start_position_y,
+                                      last_angle,
                                       last_position_x,
                                       last_position_y,
                                       wall_length,
@@ -213,8 +217,10 @@ public class Simulator.Backend.MappingAlgorithm : Object {
             }
 
             /* Neue Struktur, die die Wand beschreibt, anlegen */
-            Wall wall = { wall_start_position_x,
+            Wall wall = { wall_start_angle,
+                          wall_start_position_x,
                           wall_start_position_y,
+                          last_angle,
                           last_position_x,
                           last_position_y,
                           wall_length,
@@ -230,9 +236,15 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
     /* Stellt eine automatisch erkannte Wand dar */
     public struct Wall {
+        /* Winkel des Startpunktes im Messbereich des Roboters */
+        double start_angle;
+
         /* Relative Koordinaten des Startpunktes */
         int relative_start_x;
         int relative_start_y;
+
+        /* Winkel des Endpunktes im Messbereich des Roboters */
+        double end_angle;
 
         /* Relative Koordinaten des Enpunktes */
         int relative_end_x;

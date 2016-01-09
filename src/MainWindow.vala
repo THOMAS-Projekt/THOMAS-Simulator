@@ -74,7 +74,6 @@ public class Simulator.MainWindow : Gtk.Window {
         });
 
         build_ui ();
-        connect_signals ();
     }
 
     private void build_ui () {
@@ -92,8 +91,5 @@ public class Simulator.MainWindow : Gtk.Window {
         main_box.pack_start (canvas);
 
         this.add (main_box);
-    }
-
-    private void connect_signals () {
     }
 }
