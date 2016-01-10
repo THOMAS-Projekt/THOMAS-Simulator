@@ -34,6 +34,18 @@ public class Simulator.Backend.MappingAlgorithm : Object {
     /* Die maximale erlaubte Richtungsdifferenz zwischen den Auftrittspunkten der Messwerte, damit eine Wand erkannt wird */
     private static const double WALL_MAX_DIRECTION_GAP = (Math.PI / 180) * 40;
 
+    /* Startwinkel des rechtsliegenden Bereiches */
+    private static const double RIGHT_AREA_START_ANGLE = (Math.PI / 180) * 0;
+
+    /* Endwinkel des rechtsliegenden Bereiches */
+    private static const double RIGHT_AREA_END_ANGLE = (Math.PI / 180) * 45;
+
+    /* Der Maximale Abstand einer rechtsliegenden Wand zum Roboter */
+    private static const uint16 RIGHT_WALL_MAX_DISTANCE = 100;
+
+    /* Mindestlänge der Summe der rechtsliegenden Wände zur Überprüfung der Aussagekräftigkeit */
+    private static const int MIN_RIGHT_WALL_LENGTH_SUM = 20;
+
     /* Konvertiert Grad in Bogemmaß */
     private static double deg_to_rad (uint8 degree) {
         return ((Math.PI / 180) * degree);
@@ -72,6 +84,9 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
         /* Der letzte überprüfte Winkel */
         double last_angle = -1;
+
+        /* Der Distanzwert zum letzten überprüften Winkel */
+        uint16 last_distance = 0;
 
         /* Die Koordinaten des letzten überprüften Messwertes */
         int last_position_x = 0;
@@ -126,6 +141,7 @@ public class Simulator.Backend.MappingAlgorithm : Object {
                                               last_angle,
                                               last_position_x,
                                               last_position_y,
+                                              last_distance,
                                               wall_length,
                                               last_directions[last_directions.length - 1] };
 
@@ -176,6 +192,7 @@ public class Simulator.Backend.MappingAlgorithm : Object {
                                       last_angle,
                                       last_position_x,
                                       last_position_y,
+                                      last_distance,
                                       wall_length,
                                       last_direction };
 
@@ -190,6 +207,9 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
             /* Winkel merken */
             last_angle = angle;
+
+            /* Distanz merken */
+            last_distance = distance;
 
             /* Koordinaten merken */
             last_position_x = position_x;
@@ -223,6 +243,7 @@ public class Simulator.Backend.MappingAlgorithm : Object {
                           last_angle,
                           last_position_x,
                           last_position_y,
+                          last_distance,
                           wall_length,
                           last_direction };
 
@@ -232,6 +253,47 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
         /* Liste der Wände zurückgeben */
         return walls;
+    }
+
+    /* Versucht aus den erkannten Wänden eine Wand rechts vom Roboter zu bilden und gibt diese ggf. zurück */
+    private static double? search_for_right_wall (Wall[] walls) {
+        /* Liste der rausgefilterten Wände */
+        Wall[] right_walls = {};
+
+        /* Summe der Längen der rausgefilterten Wände */
+        int wall_length_sum = 0;
+
+        /* Summe der Richtungen der rausgefilterten Wände */
+        double relative_direction_sum = 0;
+
+        /* Alle Wände durchlaufen */
+        foreach (Wall wall in walls) {
+            /* Wir gehen davon aus, dass Wände mit einem niedrigen Winkel beginnen und mit einem hohen enden. */
+            assert (wall.start_angle < wall.end_angle);
+
+            /* Überprüfen, ob die Wand nahe rechts vom Roboter liegt */
+            if (wall.start_angle >= RIGHT_AREA_START_ANGLE && wall.end_angle <= RIGHT_AREA_END_ANGLE && wall.distance <= RIGHT_WALL_MAX_DISTANCE) {
+                /* Wand zur Liste der rechtsliegenden Wände aufnehmen */
+                right_walls += wall;
+
+                /* Summen ergänzen */
+                wall_length_sum += wall.wall_length;
+                relative_direction_sum += wall.relative_direction;
+            }
+        }
+
+        /* Es sollten mindestens zwei Wände erkannt worden sein */
+        if (right_walls.length < 2) {
+            return null;
+        }
+
+        /* Prüfen, ob die Länge der rechts erkannten Wände aussagekräftig ist */
+        if (wall_length_sum < MIN_RIGHT_WALL_LENGTH_SUM) {
+            return null;
+        }
+
+        /* Durschnittliche Richtung zurückgeben */
+        return (relative_direction_sum / right_walls.length);
     }
 
     /* Stellt eine automatisch erkannte Wand dar */
@@ -249,6 +311,9 @@ public class Simulator.Backend.MappingAlgorithm : Object {
         /* Relative Koordinaten des Enpunktes */
         int relative_end_x;
         int relative_end_y;
+
+        /* Die Distanz der Wand zum Roboter */
+        uint16 distance;
 
         /* Länge der wand */
         int wall_length;
@@ -309,6 +374,15 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
         /* Wände speichern, damit sie extern abgerufen werden können */
         last_detected_walls = walls;
+
+        /* Nach einer Wand auf der rechten Seite des Roboters suchen. */
+        double? right_wall_direction = search_for_right_wall (walls);
+
+        /* Wurde eine Wand gefunden? */
+        if (right_wall_direction != null) {
+            /* Anhand dieser Wand neu ausrichten */
+            turn ((short)(right_wall_direction * -50), 1000);
+        }
 
         /* Neue Messreihe beginnen */
         current_scan = new Gee.TreeMap<double? , uint16> ();
