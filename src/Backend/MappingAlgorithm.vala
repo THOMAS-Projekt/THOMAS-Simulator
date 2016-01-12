@@ -292,8 +292,18 @@ public class Simulator.Backend.MappingAlgorithm : Object {
             return null;
         }
 
-        /* Durschnittliche Richtung zurückgeben */
-        return (relative_direction_sum / right_walls.length);
+        /* Erste und letze Wand abfragen */
+        Wall first_right_wall = right_walls[0];
+        Wall last_right_wall = right_walls[right_walls.length - 1];
+
+        /* Teilen durch null verhindern */
+        if (last_right_wall.relative_end_x == first_right_wall.relative_start_x) {
+            /* Entspricht relativ gesehen der Richtung des Roboters */
+            return 0;
+        }
+
+        /* Richtung der Wand berechnen und zurückgeben*/
+        return Math.atan ((double)(last_right_wall.relative_end_y - first_right_wall.relative_start_y) / (double)(last_right_wall.relative_end_x - first_right_wall.relative_start_x));
     }
 
     /* Stellt eine automatisch erkannte Wand dar */
@@ -381,13 +391,19 @@ public class Simulator.Backend.MappingAlgorithm : Object {
         /* Wurde eine Wand gefunden? */
         if (right_wall_direction != null) {
             /* Anhand dieser Wand neu ausrichten */
-            turn ((short)(right_wall_direction * -50), 1000);
+            turn ((short)(right_wall_direction * -30), 100);
         }
 
         /* Neue Messreihe beginnen */
         current_scan = new Gee.TreeMap<double? , uint16> ();
 
-        /* Neuen Scanvorgang einleiten */
-        start_new_scan ();
+        /* Bis zum Ende der Neuausrichtung abwarten */
+        Timeout.add (100, () => {
+            /* Neuen Scanvorgang einleiten */
+            start_new_scan ();
+
+            /* Dies ist keine Schleife */
+            return false;
+        });
     }
 }
