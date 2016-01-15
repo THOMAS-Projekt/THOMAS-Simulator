@@ -121,10 +121,10 @@ public class Simulator.Widgets.Canvas : Gtk.DrawingArea {
         context.set_source_rgba (0, 0, 0, 0.3);
 
         robot.last_scan.@foreach ((entry) => {
-            double angle = ((Math.PI / 180) * (entry.key - 90)) - robot.direction;
+            double angle = ((Math.PI / 180) * (entry.key - 90)) + robot.direction;
             double distance = entry.@value;
 
-            double target_position_x = Math.sin (angle) * distance * field_width;
+            double target_position_x = -Math.sin (angle) * distance * field_width;
             double target_position_y = Math.cos (angle) * distance * field_height;
 
             context.move_to (0, 0);

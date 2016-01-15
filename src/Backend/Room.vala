@@ -60,7 +60,7 @@ public class Simulator.Backend.Room : Object {
         double cos_angle = Math.cos (angle);
 
         for (double i = 0; i < max_diagonal; i += DISTANCE_MEASSUREMENT_STEP) {
-            int x = (int)(position_x + (sin_angle * i));
+            int x = (int)(position_x - (sin_angle * i));
             int y = (int)(position_y + (cos_angle * i));
 
             if (wall_grid[y, x] == 1) {

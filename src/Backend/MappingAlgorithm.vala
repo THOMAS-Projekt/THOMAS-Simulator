@@ -35,10 +35,10 @@ public class Simulator.Backend.MappingAlgorithm : Object {
     private static const double WALL_MAX_DIRECTION_GAP = (Math.PI / 180) * 40;
 
     /* Startwinkel des rechtsliegenden Bereiches */
-    private static const double RIGHT_AREA_START_ANGLE = (Math.PI / 180) * 0;
+    private static const double RIGHT_AREA_START_ANGLE = (Math.PI / 180) * 120;
 
     /* Endwinkel des rechtsliegenden Bereiches */
-    private static const double RIGHT_AREA_END_ANGLE = (Math.PI / 180) * 45;
+    private static const double RIGHT_AREA_END_ANGLE = (Math.PI / 180) * 180;
 
     /* Der Maximale Abstand einer rechtsliegenden Wand zum Roboter */
     private static const uint16 RIGHT_WALL_MAX_DISTANCE = 100;
@@ -102,7 +102,7 @@ public class Simulator.Backend.MappingAlgorithm : Object {
             uint16 distance = entry.@value;
 
             /* Auftrittspunkt des Messwertes bestimmen */
-            int position_x = (int)(Math.sin (angle - (Math.PI / 2)) * distance);
+            int position_x = (int)(-Math.sin (angle - (Math.PI / 2)) * distance);
             int position_y = (int)(Math.cos (angle - (Math.PI / 2)) * distance);
 
             /* Prüfen, ob dies der erste Messwert ist */

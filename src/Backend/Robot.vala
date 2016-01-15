@@ -106,7 +106,7 @@ public class Simulator.Backend.Robot : Object {
         Gee.TreeMap<uint8, double? > distances = new Gee.TreeMap<uint8, double? > ();
 
         for (uint8 angle = 0; angle < 180; angle += 2) {
-            double distance = room.get_distance (position_x, position_y, ((Math.PI / 180) * (angle - 90)) - direction);
+            double distance = room.get_distance (position_x, position_y, ((Math.PI / 180) * (angle - 90)) + direction);
 
             /* Künstliche Ungenauigkeit */
             if (USE_INACCURACY) {
