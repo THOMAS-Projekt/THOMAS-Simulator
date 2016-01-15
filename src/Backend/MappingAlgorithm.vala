@@ -46,6 +46,12 @@ public class Simulator.Backend.MappingAlgorithm : Object {
     /* Mindestlänge der Summe der rechtsliegenden Wände zur Überprüfung der Aussagekräftigkeit */
     private static const int MIN_RIGHT_WALL_LENGTH_SUM = 20;
 
+    /* Die Zeit für die die Motoren für eine Richtungskorrektur eingeschaltet werden */
+    private static const uint STEP_TURNING_TIME = 500;
+
+    /* Die Zeit für die die Motoren für einen Schritt nach vorne eingeschaltet werden */
+    private static const uint STEP_MOVING_TIME = 500;
+
     /* Konvertiert Grad in Bogemmaß */
     private static double deg_to_rad (uint8 degree) {
         return ((Math.PI / 180) * degree);
@@ -391,14 +397,26 @@ public class Simulator.Backend.MappingAlgorithm : Object {
         /* Wurde eine Wand gefunden? */
         if (right_wall_direction != null) {
             /* Anhand dieser Wand neu ausrichten */
-            turn ((short)(right_wall_direction * -30), 100);
+            turn ((short)(right_wall_direction * -30), STEP_TURNING_TIME);
+
+            /* Bis zum Ende der Neuausrichtung abwarten */
+            Timeout.add (STEP_TURNING_TIME, () => {
+                /* Forwärtsbewegung */
+                move (200, STEP_MOVING_TIME);
+
+                /* Dies ist keine Schleife */
+                return false;
+            });
+        } else {
+            /* Forwärtsbewegung */
+            move (200, STEP_MOVING_TIME);
         }
 
         /* Neue Messreihe beginnen */
         current_scan = new Gee.TreeMap<double? , uint16> ();
 
         /* Bis zum Ende der Neuausrichtung abwarten */
-        Timeout.add (100, () => {
+        Timeout.add (STEP_MOVING_TIME + (right_wall_direction != null ? STEP_TURNING_TIME : 0), () => {
             /* Neuen Scanvorgang einleiten */
             start_new_scan ();
 

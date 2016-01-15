@@ -58,7 +58,6 @@ public class Simulator.Backend.Robot : Object {
 
             return true;
         });
-        set_motor_speed (50);
     }
 
     public void set_motor_speed (short speed) {
@@ -138,7 +137,6 @@ public class Simulator.Backend.Robot : Object {
             short acceleration_sign = (wanted_speed > current_speed ? 1 : -1);
 
             current_speed += (pending_difference > MAX_ACCELERATION ? MAX_ACCELERATION : pending_difference) * acceleration_sign;
-            debug (current_speed.to_string ());
 
             return true;
         }
