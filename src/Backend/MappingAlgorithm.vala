@@ -34,23 +34,8 @@ public class Simulator.Backend.MappingAlgorithm : Object {
     /* Die maximale erlaubte Richtungsdifferenz zwischen den Auftrittspunkten der Messwerte, damit eine Wand erkannt wird */
     private static const double WALL_MAX_DIRECTION_GAP = (Math.PI / 180) * 40;
 
-    /* Startwinkel des rechtsliegenden Bereiches */
-    private static const double RIGHT_AREA_START_ANGLE = (Math.PI / 180) * 120;
-
-    /* Endwinkel des rechtsliegenden Bereiches */
-    private static const double RIGHT_AREA_END_ANGLE = (Math.PI / 180) * 180;
-
-    /* Der Maximale Abstand einer rechtsliegenden Wand zum Roboter */
-    private static const uint16 RIGHT_WALL_MAX_DISTANCE = 100;
-
     /* Mindestlänge der Summe der rechtsliegenden Wände zur Überprüfung der Aussagekräftigkeit */
     private static const int MIN_RIGHT_WALL_LENGTH_SUM = 20;
-
-    /* Die Zeit für die die Motoren für eine Richtungskorrektur eingeschaltet werden */
-    private static const uint STEP_TURNING_TIME = 500;
-
-    /* Die Zeit für die die Motoren für einen Schritt nach vorne eingeschaltet werden */
-    private static const uint STEP_MOVING_TIME = 500;
 
     /* Konvertiert Grad in Bogemmaß */
     private static double deg_to_rad (uint8 degree) {
@@ -261,57 +246,6 @@ public class Simulator.Backend.MappingAlgorithm : Object {
         return walls;
     }
 
-    /* Versucht aus den erkannten Wänden eine Wand rechts vom Roboter zu bilden und gibt diese ggf. zurück */
-    private static double? search_for_right_wall (Wall[] walls) {
-        /* Liste der rausgefilterten Wände */
-        Wall[] right_walls = {};
-
-        /* Summe der Längen der rausgefilterten Wände */
-        int wall_length_sum = 0;
-
-        /* Summe der Richtungen der rausgefilterten Wände */
-        double relative_direction_sum = 0;
-
-        /* Alle Wände durchlaufen */
-        foreach (Wall wall in walls) {
-            /* Wir gehen davon aus, dass Wände mit einem niedrigen Winkel beginnen und mit einem hohen enden. */
-            assert (wall.start_angle < wall.end_angle);
-
-            /* Überprüfen, ob die Wand nahe rechts vom Roboter liegt */
-            if (wall.start_angle >= RIGHT_AREA_START_ANGLE && wall.end_angle <= RIGHT_AREA_END_ANGLE && wall.distance <= RIGHT_WALL_MAX_DISTANCE) {
-                /* Wand zur Liste der rechtsliegenden Wände aufnehmen */
-                right_walls += wall;
-
-                /* Summen ergänzen */
-                wall_length_sum += wall.wall_length;
-                relative_direction_sum += wall.relative_direction;
-            }
-        }
-
-        /* Es sollten mindestens zwei Wände erkannt worden sein */
-        if (right_walls.length < 2) {
-            return null;
-        }
-
-        /* Prüfen, ob die Länge der rechts erkannten Wände aussagekräftig ist */
-        if (wall_length_sum < MIN_RIGHT_WALL_LENGTH_SUM) {
-            return null;
-        }
-
-        /* Erste und letze Wand abfragen */
-        Wall first_right_wall = right_walls[0];
-        Wall last_right_wall = right_walls[right_walls.length - 1];
-
-        /* Teilen durch null verhindern */
-        if (last_right_wall.relative_end_x == first_right_wall.relative_start_x) {
-            /* Entspricht relativ gesehen der Richtung des Roboters */
-            return 0;
-        }
-
-        /* Richtung der Wand berechnen und zurückgeben*/
-        return Math.atan ((double)(last_right_wall.relative_end_y - first_right_wall.relative_start_y) / (double)(last_right_wall.relative_end_x - first_right_wall.relative_start_x));
-    }
-
     /* Stellt eine automatisch erkannte Wand dar */
     public struct Wall {
         /* Winkel des Startpunktes im Messbereich des Roboters */
@@ -391,37 +325,10 @@ public class Simulator.Backend.MappingAlgorithm : Object {
         /* Wände speichern, damit sie extern abgerufen werden können */
         last_detected_walls = walls;
 
-        /* Nach einer Wand auf der rechten Seite des Roboters suchen. */
-        double? right_wall_direction = search_for_right_wall (walls);
-
-        /* Wurde eine Wand gefunden? */
-        if (right_wall_direction != null) {
-            /* Anhand dieser Wand neu ausrichten */
-            turn ((short)(right_wall_direction * -30), STEP_TURNING_TIME);
-
-            /* Bis zum Ende der Neuausrichtung abwarten */
-            Timeout.add (STEP_TURNING_TIME, () => {
-                /* Forwärtsbewegung */
-                move (200, STEP_MOVING_TIME);
-
-                /* Dies ist keine Schleife */
-                return false;
-            });
-        } else {
-            /* Forwärtsbewegung */
-            move (200, STEP_MOVING_TIME);
-        }
-
         /* Neue Messreihe beginnen */
         current_scan = new Gee.TreeMap<double? , uint16> ();
 
-        /* Bis zum Ende der Neuausrichtung abwarten */
-        Timeout.add (STEP_MOVING_TIME + (right_wall_direction != null ? STEP_TURNING_TIME : 0), () => {
-            /* Neuen Scanvorgang einleiten */
-            start_new_scan ();
-
-            /* Dies ist keine Schleife */
-            return false;
-        });
+        /* Neuen Scanvorgang einleiten */
+        start_new_scan ();
     }
 }
