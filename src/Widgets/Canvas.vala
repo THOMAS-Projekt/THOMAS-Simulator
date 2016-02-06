@@ -74,6 +74,7 @@ public class Simulator.Widgets.Canvas : Gtk.DrawingArea {
         draw_robot (context);
         draw_last_scan (context);
         draw_last_detected_walls (context);
+        draw_last_detected_marks (context);
 
         return true;
     }
@@ -153,6 +154,28 @@ public class Simulator.Widgets.Canvas : Gtk.DrawingArea {
             context.move_to (((double)wall.relative_start_x / 30) * field_width, ((double)wall.relative_start_y / 30) * field_width);
             context.line_to (((double)wall.relative_end_x / 30) * field_width, ((double)wall.relative_end_y / 30) * field_width);
 
+            context.stroke ();
+        }
+    }
+
+    private void draw_last_detected_marks (Cairo.Context context) {
+        if (algorithm.last_detected_marks == null) {
+            return;
+        }
+
+        context.set_line_width (1);
+
+        foreach (Backend.MappingAlgorithm.Mark mark in algorithm.last_detected_marks) {
+            double real_position_x = ((double)mark.position_x / 30) * field_width;
+            double real_position_y = ((double)mark.position_y / 30) * field_width;
+
+            context.set_source_rgba (0, 0, 1, 1);
+            context.arc (real_position_x, real_position_y, 10, 0, 2 * Math.PI);
+            context.stroke ();
+
+            context.set_source_rgba (0, 1, 0, 1);
+            context.move_to (real_position_x, real_position_y);
+            context.line_to (real_position_x - Math.sin (mark.direction) * 20, real_position_y + Math.cos (mark.direction) * 15);
             context.stroke ();
         }
     }

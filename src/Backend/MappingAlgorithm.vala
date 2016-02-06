@@ -28,6 +28,55 @@
  * Dieser Algorithmus wurde im Rahmen der Facharbeit von Marcus Wichelmann entwickelt und dokumentiert.
  */
 public class Simulator.Backend.MappingAlgorithm : Object {
+    /* Klasse mit einigen Hilfsfunktionen zur Darstellung einer Karte mit unbekannten Ausmaßen in alle vier Richtungen */
+    private class Map {
+        /* Eine Struktur, die die Koordinate eines Feldes enthält */
+        private struct FieldCoordinate {
+            int x;
+            int y;
+        }
+
+        /* Die drei verschiedene Zustände eines Feldes der Karte */
+        public enum FieldState {
+            UNKNOWN,
+            FREE,
+            WALL
+        }
+
+        /*
+         * Das Koordinatensystem
+         * Die Verwendung einer TreeMap stellt hier einen Workaround für einen Fehler in mehrdimensionalen Arrays dar.
+         * Siehe https://bugzilla.gnome.org/show_bug.cgi?id=735159
+         */
+        private Gee.TreeMap<FieldCoordinate? , FieldState> map;
+
+        /* Erstellt eine neue Umgebungskarte */
+        public Map () {
+            /* Koordinatenliste erstellen */
+            map = new Gee.TreeMap<FieldCoordinate? , FieldState> ();
+        }
+
+        /* Setzt den Zustand eines Feldes */
+        public void set_field_state (int x, int y, FieldState state) {
+            /* Zustand speichern */
+            map.@set ({ x, y }, state);
+        }
+
+        /* Ruft den Zustand eines Feldes ab */
+        public FieldState get_field_state (int x, int y) {
+            /* Koordinatenstruktur erstellen */
+            FieldCoordinate coordinate = { x, y };
+
+            /* Falls nicht gesetzt ist das Feld "Unbekannt" */
+            if (!map.has_key (coordinate)) {
+                return FieldState.UNKNOWN;
+            }
+
+            /* Zustand zurückgeben */
+            return map.@get (coordinate);
+        }
+    }
+
     /* Der maximale erlaubte Abstand zwischen den Auftrittspunkten der Messwerte, damit eine Wand erkannt wird */
     private static const int WALL_MAX_DISTANCE_GAP = 60;
 
@@ -122,9 +171,6 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
                             /* Falls die vorherige Wandrichtung bekannt ist, Differenz überprüfen */
                             if (Math.fabs (direction - avg_direction) > WALL_MAX_DIRECTION_GAP) {
-                                /* Länge der Wand mit dem Satz des Pythagoras berechnen */
-                                int wall_length = (int)(Math.sqrt (Math.pow (last_position_x - wall_start_position_x, 2) + Math.pow (last_position_y - wall_start_position_y, 2)));
-
                                 /* Neue Struktur, die die Wand beschreibt, anlegen */
                                 Wall wall = { wall_start_angle,
                                               wall_start_position_x,
@@ -132,9 +178,10 @@ public class Simulator.Backend.MappingAlgorithm : Object {
                                               last_angle,
                                               last_position_x,
                                               last_position_y,
-                                              last_distance,
-                                              wall_length,
-                                              last_directions[last_directions.length - 1] };
+                                              last_distance };
+
+                                /* Weitere Angaben errechnen */
+                                wall.enhance_data ();
 
                                 /* Wand zur Liste hinzufügen */
                                 walls += wall;
@@ -156,26 +203,6 @@ public class Simulator.Backend.MappingAlgorithm : Object {
                 } else {
                     /* Wurde bereits eine Wand begonnen? */
                     if (wall_start_angle >= 0) {
-                        /* Länge der Wand mit dem Satz des Pythagoras berechnen */
-                        int wall_length = (int)(Math.sqrt (Math.pow (last_position_x - wall_start_position_x, 2) + Math.pow (last_position_y - wall_start_position_y, 2)));
-
-                        /* Die letzte Richtung */
-                        double last_direction;
-
-                        /* Prüfen, ob die letze Richtung aus der Richtungsliste abgerufen werden kann */
-                        if (last_directions.length > 0) {
-                            /* Richtung aus Liste auslesen */
-                            last_direction = last_directions[last_directions.length - 1];
-                        } else {
-                            if (last_position_x == wall_start_position_x) {
-                                /* Richtung anhand der aktuellen Position bestimmen */
-                                last_direction = Math.atan ((double)(position_y - wall_start_position_y) / (double)(position_x - wall_start_position_x));
-                            } else {
-                                /* Richtung anhand der letzten Position bestimmen */
-                                last_direction = Math.atan ((double)(last_position_y - wall_start_position_y) / (double)(last_position_x - wall_start_position_x));
-                            }
-                        }
-
                         /* Neue Struktur, die die Wand beschreibt, anlegen */
                         Wall wall = { wall_start_angle,
                                       wall_start_position_x,
@@ -183,9 +210,10 @@ public class Simulator.Backend.MappingAlgorithm : Object {
                                       last_angle,
                                       last_position_x,
                                       last_position_y,
-                                      last_distance,
-                                      wall_length,
-                                      last_direction };
+                                      last_distance };
+
+                        /* Weitere Angaben errechnen */
+                        wall.enhance_data ();
 
                         /* Wand zur Liste hinzufügen */
                         walls += wall;
@@ -212,21 +240,6 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
         /* Wurde die letzte Wand schon beendet? */
         if (wall_start_angle >= 0) {
-            /* Länge der Wand mit dem Satz des Pythagoras berechnen */
-            int wall_length = (int)(Math.sqrt (Math.pow (last_position_x - wall_start_position_x, 2) + Math.pow (last_position_y - wall_start_position_y, 2)));
-
-            /* Die letzte Richtung */
-            double last_direction;
-
-            /* Prüfen, ob die letze Richtung aus der Richtungsliste abgerufen werden kann */
-            if (last_directions.length > 0) {
-                /* Richtung aus Liste auslesen */
-                last_direction = last_directions[last_directions.length - 1];
-            } else {
-                /* Die Wand ist dann wohl ohnehin äußerst kurz, die können wir einfach ignorieren */
-                return walls;
-            }
-
             /* Neue Struktur, die die Wand beschreibt, anlegen */
             Wall wall = { wall_start_angle,
                           wall_start_position_x,
@@ -234,9 +247,10 @@ public class Simulator.Backend.MappingAlgorithm : Object {
                           last_angle,
                           last_position_x,
                           last_position_y,
-                          last_distance,
-                          wall_length,
-                          last_direction };
+                          last_distance };
+
+            /* Weitere Angaben errechnen */
+            wall.enhance_data ();
 
             /* Wand zur Liste hinzufügen */
             walls += wall;
@@ -244,6 +258,74 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
         /* Liste der Wände zurückgeben */
         return walls;
+    }
+
+    /* Stellt aus den Wanddaten Merkmale heraus und gibt diese zurück */
+    private static Mark[] detect_marks (Wall[] walls) {
+        /* Liste der erkannten Merkmale */
+        Mark[] marks = {};
+
+        /* Merkt sich die vorherige Wand */
+        Wall? last_wall = null;
+
+        /* Alle Wände durchlaufen */
+        for (int i = 0; i < walls.length; i++) {
+            /* Wandinformationen abrufen */
+            Wall wall = walls[i];
+
+            /* Mit der zweiten Wand beginnen */
+            if (last_wall != null) {
+                /* Differenz der Wandrichtungen berechnen */
+                double direction_difference = Math.fabs (last_wall.relative_direction - wall.relative_direction);
+
+                /* Differenz prüfen */
+                if (direction_difference > Math.PI / 3 && direction_difference < Math.PI / 3 * 2) {
+                    /*
+                     * Berechnung orientiert an https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection
+                     * Für bessere Lesbarkeit Werte zwischenspeichern
+                     */
+                    double x1 = last_wall.relative_start_x;
+                    double x2 = last_wall.relative_end_x;
+                    double x3 = wall.relative_start_x;
+                    double x4 = wall.relative_end_x;
+                    double y1 = last_wall.relative_start_y;
+                    double y2 = last_wall.relative_end_y;
+                    double y3 = wall.relative_start_y;
+                    double y4 = wall.relative_end_y;
+
+                    /* Zaehler */
+                    double zx = (x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4);
+                    double zy = (x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4);
+
+                    /* Nenner */
+                    double n = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+
+                    /* Prüfen, ob die Wände einen Schittpunkt haben */
+                    if (n != 0) {
+                        /* Koordinaten des Schnittpunktes abrufen */
+                        double mark_position_x = zx / n;
+                        double mark_position_y = zy / n;
+
+                        /* Merkmal erstellen */
+                        Mark mark = {
+                            mark_position_x,
+                            mark_position_y,
+                            wall.relative_direction,
+                            MarkType.CORNER
+                        };
+
+                        /* Merkmal zur Liste hinzufügen */
+                        marks += mark;
+                    }
+                }
+            }
+
+            /* Wand als vorherige Wand merken */
+            last_wall = wall;
+        }
+
+        /* Merkmale zurückgeben */
+        return marks;
     }
 
     /* Stellt eine automatisch erkannte Wand dar */
@@ -270,6 +352,38 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
         /* Relative Richtung der Wand (bezogen auf die Drehrichtung des Roboters) */
         double relative_direction;
+
+        /* Berechnet die fehlenden Angaben anhand der gegebenen Werte */
+        public void enhance_data () {
+            /* Länge der Wand mit dem Satz des Pythagoras berechnen */
+            wall_length = (int)(Math.sqrt (Math.pow (relative_end_x - relative_start_x, 2) + Math.pow (relative_end_y - relative_start_y, 2)));
+
+            /* Teilen durch Null verhindern */
+            if (relative_end_x == relative_start_x) {
+                return;
+            }
+
+            /* Relative Richtung der Wand in Bezug zum Roboter berechnen */
+            relative_direction = Math.atan ((double)(relative_end_y - relative_start_y) / (double)(relative_end_x - relative_start_x));
+        }
+    }
+
+    /* Stellt ein Wiedererkennungsmerkmal dar */
+    public struct Mark {
+        /* Relative Koordinaten des Merkmales */
+        double position_x;
+        double position_y;
+
+        /* Die Richtung */
+        double direction;
+
+        /* Die Art des Merkmals */
+        MarkType type;
+    }
+
+    /* Die verschiedenen Arten von Merkmalen */
+    public enum MarkType {
+        CORNER
     }
 
     /* Spiegelt die Funktionen zum Steuern des Roboters wieder */
@@ -286,8 +400,14 @@ public class Simulator.Backend.MappingAlgorithm : Object {
     /* Zeit auf eine Funktion zum Beginn eines neuen Scanvorganges */
     public unowned StartNewScanFunc start_new_scan { private get; private set; }
 
+    /* Die Umgebungskarte die erstellt wird */
+    private Map map;
+
     /* Zuletzt erkannte Wandliste */
     public Wall[]? last_detected_walls { get; private set; default = null; }
+
+    /* Zuletzt erkannte Merkmalsliste */
+    public Mark[]? last_detected_marks { get; private set; default = null; }
 
     /* Speichert die Distanzwerte des momentanen Scanvorganges */
     private Gee.TreeMap<double? , uint16> current_scan;
@@ -298,6 +418,9 @@ public class Simulator.Backend.MappingAlgorithm : Object {
         this.move = move_func;
         this.turn = turn_func;
         this.start_new_scan = start_new_scan_func;
+
+        /* Karte erstellen */
+        map = new Map ();
 
         /* Erste Messreihe beginnen */
         current_scan = new Gee.TreeMap<double? , uint16> ();
@@ -324,6 +447,12 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
         /* Wände speichern, damit sie extern abgerufen werden können */
         last_detected_walls = walls;
+
+        /* Die Wände auf Merkmale untersuchen */
+        Mark[] marks = detect_marks (walls);
+
+        /* Merkmale speichern, damit sie extern abgerufen werden können */
+        last_detected_marks = marks;
 
         /* Neue Messreihe beginnen */
         current_scan = new Gee.TreeMap<double? , uint16> ();

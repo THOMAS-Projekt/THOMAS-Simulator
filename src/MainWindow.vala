@@ -77,6 +77,8 @@ public class Simulator.MainWindow : Gtk.Window {
     }
 
     private void build_ui () {
+        this.resizable = false;
+
         header_bar = new Gtk.HeaderBar ();
         header_bar.show_close_button = true;
         header_bar.title = "THOMAS-Simulator";

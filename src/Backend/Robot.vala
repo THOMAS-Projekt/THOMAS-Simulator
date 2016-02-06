@@ -21,14 +21,14 @@
 
 public class Simulator.Backend.Robot : Object {
     private static const short MAX_ACCELERATION = 15;
-    private static const bool USE_INACCURACY = true;
+    private static const bool USE_INACCURACY = false;
 
     public Room room { private get; construct; }
 
     public double position_x { get; private set; default = 2; }
     public double position_y { get; private set; default = 2; }
 
-    public double direction { get; private set; default = -0.5; }
+    public double direction { get; private set; default = -0.2; }
 
     public short current_speed { get; private set; default = 0; }
     public short wanted_speed { get; private set; default = 0; }
