@@ -83,8 +83,14 @@ public class Simulator.Backend.MappingAlgorithm : Object {
     /* Die maximale erlaubte Richtungsdifferenz zwischen den Auftrittspunkten der Messwerte, damit eine Wand erkannt wird */
     private static const double WALL_MAX_DIRECTION_GAP = (Math.PI / 180) * 40;
 
-    /* Mindestlänge der Summe der rechtsliegenden Wände zur Überprüfung der Aussagekräftigkeit */
-    private static const int MIN_RIGHT_WALL_LENGTH_SUM = 20;
+    /* Der maximale Radius, in dem der Roboter Messdaten als zuverlässig einstuft */
+    private static const int MAX_DETECTION_RADIUS = 150;
+
+    /* Der maximale Abstand zwischen zwei Merkmalen, damit diese gruppiert werden */
+    private static const int MARK_MAX_DISTANCE_GAP = 40;
+
+    /* Die maximale erlaubte Richtungsdifferenz zweier Merkmale, damit diese gruppiert werden */
+    private static const double MARK_MAX_DIRECTION_GAP = (Math.PI / 180) * 20;
 
     /* Konvertiert Grad in Bogemmaß */
     private static double deg_to_rad (uint8 degree) {
@@ -273,15 +279,27 @@ public class Simulator.Backend.MappingAlgorithm : Object {
             /* Wandinformationen abrufen */
             Wall wall = walls[i];
 
+            /* Mittelpunkt der Wand ermitteln */
+            int center_x = (wall.relative_start_x + wall.relative_end_x).abs () / 2;
+            int center_y = (wall.relative_start_y + wall.relative_end_y).abs () / 2;
+
+            /* Abstand des Mittelpunktes zum Roboter bestimmen */
+            int distance_gap = (int)(Math.sqrt (Math.pow (center_x, 2) + Math.pow (center_y, 2)));
+
+            /* Wände mit zu großem Abstand ignorieren */
+            if (distance_gap > MAX_DETECTION_RADIUS) {
+                continue;
+            }
+
             /* Mit der zweiten Wand beginnen */
             if (last_wall != null) {
                 /* Differenz der Wandrichtungen berechnen */
                 double direction_difference = Math.fabs (last_wall.relative_direction - wall.relative_direction);
 
                 /* Differenz prüfen */
-                if (direction_difference > Math.PI / 3 && direction_difference < Math.PI / 3 * 2) {
+                if (direction_difference > Math.PI / 2.5 && direction_difference < Math.PI / 3 * 2) {
                     /*
-                     * Berechnung orientiert an https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection
+                     * Schnittpunktberechnung orientiert an https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection
                      * Für bessere Lesbarkeit Werte zwischenspeichern
                      */
                     double x1 = last_wall.relative_start_x;
@@ -306,11 +324,14 @@ public class Simulator.Backend.MappingAlgorithm : Object {
                         double mark_position_x = zx / n;
                         double mark_position_y = zy / n;
 
+                        /* Durchschnittliche Richtung bestimmen */
+                        double avg_direction = (last_wall.relative_direction + wall.relative_direction) / 2;
+
                         /* Merkmal erstellen */
                         Mark mark = {
                             mark_position_x,
                             mark_position_y,
-                            wall.relative_direction,
+                            avg_direction,
                             MarkType.CORNER
                         };
 
@@ -326,6 +347,85 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
         /* Merkmale zurückgeben */
         return marks;
+    }
+
+    /* Gruppiert die übergebenden Merkmale zu einem Durchschnittsmerkmal */
+    private static Mark? create_avg_mark (Mark[] marks) {
+        /* Teilen durch Null verhindern */
+        if (marks.length == 0) {
+            return null;
+        }
+
+        /* Die Summen der verschiedenen Merkmaleigenschaften */
+        double position_x_sum = 0;
+        double position_y_sum = 0;
+        double direction_sum = 0;
+
+        /* Zu gruppierende Merkmale durchlaufen */
+        foreach (Mark mark in marks) {
+            position_x_sum += mark.position_x;
+            position_y_sum += mark.position_y;
+            direction_sum += mark.direction;
+        }
+
+        /* Durchschnittsmerkmal zurückgeben */
+        return { position_x_sum / marks.length,
+                 position_y_sum / marks.length,
+                 direction_sum / marks.length };
+    }
+
+    /* Gruppiert einige erkannte Merkmale zu wenigen aussagekräftigeren */
+    private static Mark[] group_marks (Mark[] marks) {
+        /* Liste der gruppierten Merkmale */
+        Mark[] grouped_marks = {};
+
+        /* Merkt sich das vorherige Merkmal */
+        Wall? last_mark = null;
+
+        /* Die Merkmale für die nächste Gruppe */
+        Mark[] marks_in_group = {};
+
+        /* Alle Merkmale durchlaufen */
+        for (int i = 0; i < marks.length; i++) {
+            /* Merkmal abrufen */
+            Mark mark = marks[i];
+
+            /* Wurde eine neue Gruppe begonnen */
+            if (marks_in_group.length == 0) {
+                /* Neue Gruppe beginnen */
+                marks_in_group += mark;
+            } else {
+                /* Durchschnittsmerkmal bestimmen */
+                Mark avg_mark = create_avg_mark (marks_in_group);
+
+                /* Den Abstand zwischen der Durchschnittsmarke und der neuen Marke berechnen */
+                int distance_gap = (int)(Math.sqrt (Math.pow (avg_mark.position_x - mark.position_x, 2) + Math.pow (avg_mark.position_y - mark.position_y, 2)));
+
+                /* Die Richtungsdifferenz zwischen der Durchschnittsmarke und der neuen Marke berechnen */
+                double direction_difference = Math.fabs (avg_mark.direction - mark.direction);
+
+                /* Ist der Unterschied der Merkmale zu groß? */
+                if (distance_gap > MARK_MAX_DISTANCE_GAP || direction_difference > MARK_MAX_DIRECTION_GAP) {
+                    /* Gruppe übernehmen */
+                    grouped_marks += avg_mark;
+
+                    /* Neue Gruppe beginnen */
+                    marks_in_group = {};
+                }
+
+                /* Merkmal zur Gruppe hinzufügen */
+                marks_in_group += mark;
+            }
+        }
+
+        /* Sind noch Merkmale ausstehend? */
+        if (marks_in_group.length > 0) {
+            /* Ausstehende Merkmale als weitere Gruppe vereinen */
+            grouped_marks += create_avg_mark (marks_in_group);
+        }
+
+        /* Merkmale zurückgeben */
+        return grouped_marks;
     }
 
     /* Stellt eine automatisch erkannte Wand dar */
@@ -383,6 +483,7 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
     /* Die verschiedenen Arten von Merkmalen */
     public enum MarkType {
+        /* Dies dient der Erweiterbarkeit, vorerst werden nur Ecken behandelt. */
         CORNER
     }
 
@@ -408,6 +509,9 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
     /* Zuletzt erkannte Merkmalsliste */
     public Mark[]? last_detected_marks { get; private set; default = null; }
+
+    /* Gruppierte Version der zuletzt erkannten Merkmalsliste */
+    public Mark[]? last_grouped_marks { get; private set; default = null; }
 
     /* Speichert die Distanzwerte des momentanen Scanvorganges */
     private Gee.TreeMap<double? , uint16> current_scan;
@@ -453,6 +557,12 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
         /* Merkmale speichern, damit sie extern abgerufen werden können */
         last_detected_marks = marks;
+
+        /* Merkmale gruppieren */
+        Mark[] grouped_marks = group_marks (marks);
+
+        /* Gruppierte Merkmale speichern, damit sie extern abgerufen werden können */
+        last_grouped_marks = grouped_marks;
 
         /* Neue Messreihe beginnen */
         current_scan = new Gee.TreeMap<double? , uint16> ();
