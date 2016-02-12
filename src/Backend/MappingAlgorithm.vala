@@ -87,7 +87,7 @@ public class Simulator.Backend.MappingAlgorithm : Object {
     private static const int MAX_DETECTION_RADIUS = 150;
 
     /* Der maximale Abstand zwischen zwei nahe beieienander liegenden Merkmalen */
-    private static const int MARK_MAX_DISTANCE_GAP = 40;
+    private static const int MARK_MAX_DISTANCE_GAP = 30;
 
     /* Konvertiert Grad in Bogemmaß */
     private static double deg_to_rad (uint8 degree) {
@@ -438,7 +438,7 @@ public class Simulator.Backend.MappingAlgorithm : Object {
     public Mark[]? last_detected_marks { get; private set; default = null; }
 
     /* Das zuletzt zur Orientierung genutzte Merkmal */
-    public Mark? compared_orientation_mark  { get; private set; default = null; }
+    public Mark[]? compared_orientation_marks  { get; private set; default = null; }
 
     /* Speichert die Distanzwerte des momentanen Scanvorganges */
     private Gee.TreeMap<double? , uint16> current_scan;
@@ -496,7 +496,7 @@ public class Simulator.Backend.MappingAlgorithm : Object {
             update_pose (comparable_marks[0], comparable_marks[1]);
 
             /* Orientierungsmarke speichern */
-            compared_orientation_mark = comparable_marks[0];
+            compared_orientation_marks = comparable_marks;
         } else {
             /*
              * Keine Anhaltspunkte, neue Position abschätzen
@@ -506,7 +506,7 @@ public class Simulator.Backend.MappingAlgorithm : Object {
             robot_position_y += (int)(Math.cos (robot_direction) * 50);
 
             /* Keine Orientierungsmarke vorhanden */
-            compared_orientation_mark = null;
+            compared_orientation_marks = null;
         }
 
         /* Merkmale speichern, damit sie extern abgerufen werden können */
@@ -571,22 +571,40 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
     /* Rotiert die vorherigen Merkmale um ein Hauptmerkmal, sodass eine Deckungsgleichheit zum Zielmerkmal entsteht */
     private Mark[] rotate_marks (Mark[] old_marks, Mark old_main_mark, Mark target_mark) {
+        /* Die transformierten Merkmale */
         Mark[] rotated_marks = {};
 
+        /* Die Verschiebung des Merkmals */
         int mark_movement_x = target_mark.position_x - old_main_mark.position_x;
         int mark_movement_y = target_mark.position_y - old_main_mark.position_y;
 
+        /* Richtungsdifferenz; Alle anderen Merkmale müssen mit diesem Winkel um das Hauptmerkmal herum gedreht werden */
+        double rotating_angle = target_mark.direction - old_main_mark.direction;
+
+        /* Alte Merkmale durchlaufen und nacheinander transformieren */
         for (int i = 0; i < old_marks.length; i++) {
+            /* Merkmal abrufen */
             Mark mark = old_marks[i];
 
+            /* Neue Position bestimmen */
             int new_position_x = mark.position_x + mark_movement_x;
             int new_position_y = mark.position_y + mark_movement_y;
+
+            /* Abstand der Marke zum Dreh-Mittelpunkt bestimmen */
+            int distance_to_target_mark = (int)(Math.sqrt (Math.pow (new_position_x - target_mark.position_x, 2) + Math.pow (new_position_y - target_mark.position_y, 2)));
+
+            /* Neuen Winkel berechnen */
+            double new_direction = Math.atan ((double)(new_position_y - target_mark.position_y) / (double)(new_position_x - target_mark.position_x)) + rotating_angle;
+
+            /* Punkt nach Verschiebung durch den Winkel nach gegebenem Abstand neu positionieren */
+            new_position_x += (int)(Math.sin (new_direction) * distance_to_target_mark);
+            new_position_x += (int)(Math.sin (new_direction) * distance_to_target_mark);
 
             /* Verschobenes Merkmal erstellen */
             Mark rotatetd_mark = {
                 new_position_x,
                 new_position_y,
-                mark.direction,
+                new_direction,
                 MarkType.CORNER
             };
 
@@ -594,6 +612,7 @@ public class Simulator.Backend.MappingAlgorithm : Object {
             rotated_marks += mark;
         }
 
+        /* Transformierte Merkmale zurückgeben */
         return rotated_marks;
     }
 

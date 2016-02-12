@@ -75,7 +75,7 @@ public class Simulator.Widgets.Canvas : Gtk.DrawingArea {
         draw_last_scan (context);
         draw_last_detected_walls (context);
         draw_last_detected_marks (context);
-        draw_last_orientation_mark (context);
+        draw_last_orientation_marks (context);
 
         return true;
     }
@@ -181,23 +181,25 @@ public class Simulator.Widgets.Canvas : Gtk.DrawingArea {
         }
     }
 
-    private void draw_last_orientation_mark (Cairo.Context context) {
-        if (algorithm.compared_orientation_mark == null) {
+    private void draw_last_orientation_marks (Cairo.Context context) {
+        if (algorithm.compared_orientation_marks == null) {
             return;
         }
 
-        double real_position_x = ((double)algorithm.compared_orientation_mark.position_x / 30) * field_width;
-        double real_position_y = ((double)algorithm.compared_orientation_mark.position_y / 30) * field_width;
+        for (int i = 0; i < 2; i++) {
+            double real_position_x = ((double)algorithm.compared_orientation_marks[i].position_x / 30) * field_width;
+            double real_position_y = ((double)algorithm.compared_orientation_marks[i].position_y / 30) * field_width;
 
-        context.set_line_width (2);
-        context.set_source_rgba (1, 0, 1, 1);
-        context.arc (real_position_x, real_position_y, 10, 0, 2 * Math.PI);
-        context.stroke ();
+            context.set_line_width (2);
+            context.set_source_rgba (1, 0, 1, 1);
+            context.arc (real_position_x, real_position_y, 10, 0, 2 * Math.PI);
+            context.stroke ();
 
-        context.set_line_width (2);
-        context.set_source_rgba (1, 1, 0, 1);
-        context.move_to (real_position_x, real_position_y);
-        context.line_to (real_position_x - Math.sin (algorithm.compared_orientation_mark.direction) * 20, real_position_y + Math.cos (algorithm.compared_orientation_mark.direction) * 20);
-        context.stroke ();
+            context.set_line_width (2);
+            context.set_source_rgba (1, 1, 0, 1);
+            context.move_to (real_position_x, real_position_y);
+            context.line_to (real_position_x - Math.sin (algorithm.compared_orientation_marks[i].direction) * 20, real_position_y + Math.cos (algorithm.compared_orientation_marks[i].direction) * 20);
+            context.stroke ();
+        }
     }
 }

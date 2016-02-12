@@ -25,10 +25,10 @@ public class Simulator.Backend.Robot : Object {
 
     public Room room { private get; construct; }
 
-    public double position_x { get; private set; default = 2; }
-    public double position_y { get; private set; default = 2; }
+    public double position_x { get; private set; default = 3; }
+    public double position_y { get; private set; default = 3; }
 
-    public double direction { get; private set; default = -1.3; }
+    public double direction { get; private set; default = 0; }
 
     public short current_speed { get; private set; default = 0; }
     public short wanted_speed { get; private set; default = 0; }
@@ -58,7 +58,9 @@ public class Simulator.Backend.Robot : Object {
 
             return true;
         });
-        set_motor_speed (50);
+        
+        //set_motor_speed (50);
+        set_motor_turning_speed (20);
     }
 
     public void set_motor_speed (short speed) {
