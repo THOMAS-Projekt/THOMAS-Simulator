@@ -86,11 +86,8 @@ public class Simulator.Backend.MappingAlgorithm : Object {
     /* Der maximale Radius, in dem der Roboter Messdaten als zuverlässig einstuft */
     private static const int MAX_DETECTION_RADIUS = 150;
 
-    /* Der maximale Abstand zwischen zwei Merkmalen, damit diese gruppiert werden */
+    /* Der maximale Abstand zwischen zwei nahe beieienander liegenden Merkmalen */
     private static const int MARK_MAX_DISTANCE_GAP = 40;
-
-    /* Die maximale erlaubte Richtungsdifferenz zweier Merkmale, damit diese gruppiert werden */
-    private static const double MARK_MAX_DIRECTION_GAP = (Math.PI / 180) * 20;
 
     /* Konvertiert Grad in Bogemmaß */
     private static double deg_to_rad (uint8 degree) {
@@ -329,8 +326,8 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
                         /* Merkmal erstellen */
                         Mark mark = {
-                            mark_position_x,
-                            mark_position_y,
+                            (int)mark_position_x,
+                            (int)mark_position_y,
                             avg_direction,
                             MarkType.CORNER
                         };
@@ -347,85 +344,6 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
         /* Merkmale zurückgeben */
         return marks;
-    }
-
-    /* Gruppiert die übergebenden Merkmale zu einem Durchschnittsmerkmal */
-    private static Mark? create_avg_mark (Mark[] marks) {
-        /* Teilen durch Null verhindern */
-        if (marks.length == 0) {
-            return null;
-        }
-
-        /* Die Summen der verschiedenen Merkmaleigenschaften */
-        double position_x_sum = 0;
-        double position_y_sum = 0;
-        double direction_sum = 0;
-
-        /* Zu gruppierende Merkmale durchlaufen */
-        foreach (Mark mark in marks) {
-            position_x_sum += mark.position_x;
-            position_y_sum += mark.position_y;
-            direction_sum += mark.direction;
-        }
-
-        /* Durchschnittsmerkmal zurückgeben */
-        return { position_x_sum / marks.length,
-                 position_y_sum / marks.length,
-                 direction_sum / marks.length };
-    }
-
-    /* Gruppiert einige erkannte Merkmale zu wenigen aussagekräftigeren */
-    private static Mark[] group_marks (Mark[] marks) {
-        /* Liste der gruppierten Merkmale */
-        Mark[] grouped_marks = {};
-
-        /* Merkt sich das vorherige Merkmal */
-        Wall? last_mark = null;
-
-        /* Die Merkmale für die nächste Gruppe */
-        Mark[] marks_in_group = {};
-
-        /* Alle Merkmale durchlaufen */
-        for (int i = 0; i < marks.length; i++) {
-            /* Merkmal abrufen */
-            Mark mark = marks[i];
-
-            /* Wurde eine neue Gruppe begonnen */
-            if (marks_in_group.length == 0) {
-                /* Neue Gruppe beginnen */
-                marks_in_group += mark;
-            } else {
-                /* Durchschnittsmerkmal bestimmen */
-                Mark avg_mark = create_avg_mark (marks_in_group);
-
-                /* Den Abstand zwischen der Durchschnittsmarke und der neuen Marke berechnen */
-                int distance_gap = (int)(Math.sqrt (Math.pow (avg_mark.position_x - mark.position_x, 2) + Math.pow (avg_mark.position_y - mark.position_y, 2)));
-
-                /* Die Richtungsdifferenz zwischen der Durchschnittsmarke und der neuen Marke berechnen */
-                double direction_difference = Math.fabs (avg_mark.direction - mark.direction);
-
-                /* Ist der Unterschied der Merkmale zu groß? */
-                if (distance_gap > MARK_MAX_DISTANCE_GAP || direction_difference > MARK_MAX_DIRECTION_GAP) {
-                    /* Gruppe übernehmen */
-                    grouped_marks += avg_mark;
-
-                    /* Neue Gruppe beginnen */
-                    marks_in_group = {};
-                }
-
-                /* Merkmal zur Gruppe hinzufügen */
-                marks_in_group += mark;
-            }
-        }
-
-        /* Sind noch Merkmale ausstehend? */
-        if (marks_in_group.length > 0) {
-            /* Ausstehende Merkmale als weitere Gruppe vereinen */
-            grouped_marks += create_avg_mark (marks_in_group);
-        }
-
-        /* Merkmale zurückgeben */
-        return grouped_marks;
     }
 
     /* Stellt eine automatisch erkannte Wand dar */
@@ -471,14 +389,23 @@ public class Simulator.Backend.MappingAlgorithm : Object {
     /* Stellt ein Wiedererkennungsmerkmal dar */
     public struct Mark {
         /* Relative Koordinaten des Merkmales */
-        double position_x;
-        double position_y;
+        int position_x;
+        int position_y;
 
         /* Die Richtung */
         double direction;
 
         /* Die Art des Merkmals */
         MarkType type;
+
+        /* Gibt an, ob das übergebende Merkmal in der Nähe liegt */
+        public bool is_near (Mark mark) {
+            /* Abstand zwischen den Merkmalen berechnen */
+            int distance_gap = (int)(Math.sqrt (Math.pow (position_x - mark.position_x, 2) + Math.pow (position_y - mark.position_y, 2)));
+
+            /* Zurückgeben, ob die Merkmale nahe beieinander liegen */
+            return (distance_gap <= MARK_MAX_DISTANCE_GAP);
+        }
     }
 
     /* Die verschiedenen Arten von Merkmalen */
@@ -510,11 +437,16 @@ public class Simulator.Backend.MappingAlgorithm : Object {
     /* Zuletzt erkannte Merkmalsliste */
     public Mark[]? last_detected_marks { get; private set; default = null; }
 
-    /* Gruppierte Version der zuletzt erkannten Merkmalsliste */
-    public Mark[]? last_grouped_marks { get; private set; default = null; }
+    /* Das zuletzt zur Orientierung genutzte Merkmal */
+    public Mark? compared_orientation_mark  { get; private set; default = null; }
 
     /* Speichert die Distanzwerte des momentanen Scanvorganges */
     private Gee.TreeMap<double? , uint16> current_scan;
+
+    /* Die selbstbezüglich ermittelte Roboterposition und Richtung, ausgehend von der Startposition. */
+    private int robot_position_x = 0;
+    private int robot_position_y = 0;
+    private double robot_direction = 0;
 
     /* Der Konstruktor der Klasse, hier sollten die nötigen Funktionen zur Kontrolle des Roboters übergeben werden */
     public MappingAlgorithm (MoveFunc move_func, TurnFunc turn_func, StartNewScanFunc start_new_scan_func) {
@@ -555,19 +487,117 @@ public class Simulator.Backend.MappingAlgorithm : Object {
         /* Die Wände auf Merkmale untersuchen */
         Mark[] marks = detect_marks (walls);
 
+        /* Nach vergleichbaren Merkmalen suchen */
+        Mark[] comparable_marks = search_comparable_marks (marks);
+
+        /* Wurden vergleichbare Merkmale gefunden? */
+        if (comparable_marks.length == 2) {
+            /* Roboterposition neu ermitteln */
+            update_pose (comparable_marks[0], comparable_marks[1]);
+
+            /* Orientierungsmarke speichern */
+            compared_orientation_mark = comparable_marks[0];
+        } else {
+            /*
+             * Keine Anhaltspunkte, neue Position abschätzen
+             * TODO: Strecke anhand der Fahrtzeit berechnen
+             */
+            robot_position_x += (int)(Math.sin (robot_direction) * 50);
+            robot_position_y += (int)(Math.cos (robot_direction) * 50);
+
+            /* Keine Orientierungsmarke vorhanden */
+            compared_orientation_mark = null;
+        }
+
         /* Merkmale speichern, damit sie extern abgerufen werden können */
         last_detected_marks = marks;
-
-        /* Merkmale gruppieren */
-        Mark[] grouped_marks = group_marks (marks);
-
-        /* Gruppierte Merkmale speichern, damit sie extern abgerufen werden können */
-        last_grouped_marks = grouped_marks;
 
         /* Neue Messreihe beginnen */
         current_scan = new Gee.TreeMap<double? , uint16> ();
 
         /* Neuen Scanvorgang einleiten */
         start_new_scan ();
+    }
+
+    /* Sucht ein vorheriges und ein aktuelles Merkmal, das einen Positionsvergleich zulässt */
+    private Mark[] search_comparable_marks (Mark[] marks) {
+        /*
+         * - Aktuelle Merkmale durchlaufen
+         * - Jeweils alle vorherigen Merkmale auf dieses aktuelle Merkmal legen und einpassen
+         * - Deckungsgleicheit überprüfen
+         * - Merkmalkombination mit höchster Deckungsgleichheit zurückgeben
+         */
+
+        /* Der Rekord an übereinstimmenden Merkmalen */
+        int best_accepted_marks = 0;
+
+        /* Das am besten passende Merkmalspaar */
+        Mark[] comparable_marks = {};
+
+        /* Alle aktuellen Merkmale durchlaufen */
+        for (int i = 0; i < marks.length; i++) {
+            /* Alle vorherigen Merkmale nacheinander durchprobieren und einpassen */
+            for (int j = 0; j < last_detected_marks.length; j++) {
+                /* Vorherige Merkmale transformieren, sodass sie auf die aktuellen Merkmale passen sollten */
+                Mark[] rotated_marks = rotate_marks (last_detected_marks, last_detected_marks[j], marks[i]);
+
+                /* Deckungsgleiche Merkmale zählen */
+                int accepted_marks = 0;
+
+                /* Transformierte Merkmale durchprüfen */
+                for (int k = 0; k < rotated_marks.length; k++) {
+                    /* Originalmerkmal mit gleicher Position suchen */
+                    for (int l = 0; l < marks.length; l++) {
+                        /* Prüfen, ob die Merkmale aufeinander liegen */
+                        if (rotated_marks[k].is_near (marks[l])) {
+                            /* Ein weiteres deckungsgleiches Merkmal zählen */
+                            accepted_marks++;
+                        }
+                    }
+                }
+
+                /* Überschreitet die Trefferquote den bisherigen Rekord? */
+                if (accepted_marks > best_accepted_marks) {
+                    /* Neue Trefferquote und zugehöriges Merkmalspaar speichern */
+                    best_accepted_marks = accepted_marks;
+                    comparable_marks = { marks[i], last_detected_marks[j] };
+                }
+            }
+        }
+
+        /* Merkmalspaar zurückgeben */
+        return comparable_marks;
+    }
+
+    /* Rotiert die vorherigen Merkmale um ein Hauptmerkmal, sodass eine Deckungsgleichheit zum Zielmerkmal entsteht */
+    private Mark[] rotate_marks (Mark[] old_marks, Mark old_main_mark, Mark target_mark) {
+        Mark[] rotated_marks = {};
+
+        int mark_movement_x = target_mark.position_x - old_main_mark.position_x;
+        int mark_movement_y = target_mark.position_y - old_main_mark.position_y;
+
+        for (int i = 0; i < old_marks.length; i++) {
+            Mark mark = old_marks[i];
+
+            int new_position_x = mark.position_x + mark_movement_x;
+            int new_position_y = mark.position_y + mark_movement_y;
+
+            /* Verschobenes Merkmal erstellen */
+            Mark rotatetd_mark = {
+                new_position_x,
+                new_position_y,
+                mark.direction,
+                MarkType.CORNER
+            };
+
+            /* Merkmal zur Liste hinzufügen */
+            rotated_marks += mark;
+        }
+
+        return rotated_marks;
+    }
+
+    /* Berechnet anhand eines Merkmals die neue Position und Richtung des Roboters */
+    private void update_pose (Mark previous_mark, Mark mark) {
     }
 }

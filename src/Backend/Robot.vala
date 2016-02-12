@@ -21,14 +21,14 @@
 
 public class Simulator.Backend.Robot : Object {
     private static const short MAX_ACCELERATION = 15;
-    private static const bool USE_INACCURACY = true;
+    private static const bool USE_INACCURACY = false;
 
     public Room room { private get; construct; }
 
     public double position_x { get; private set; default = 2; }
     public double position_y { get; private set; default = 2; }
 
-    public double direction { get; private set; default = -0.2; }
+    public double direction { get; private set; default = -1.3; }
 
     public short current_speed { get; private set; default = 0; }
     public short wanted_speed { get; private set; default = 0; }
@@ -58,7 +58,7 @@ public class Simulator.Backend.Robot : Object {
 
             return true;
         });
-        set_motor_speed (30);
+        set_motor_speed (50);
     }
 
     public void set_motor_speed (short speed) {
