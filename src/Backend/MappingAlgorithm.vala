@@ -89,6 +89,12 @@ public class Simulator.Backend.MappingAlgorithm : Object {
     /* Der maximale Abstand zwischen zwei nahe beieienander liegenden Merkmalen */
     private static const int MARK_MAX_DISTANCE_GAP = 30;
 
+    /* Die maximale erlaubte Abweichung der errechneten Fahrtrichtung zur erwarteten */
+    private static const double MAX_STEP_DIRECTION_INACCURACY = (Math.PI / 180) * 5;
+
+    /* Die maximale erlaubte Abweichung der errechneten Schrittrichtung zur erwarteten */
+    private static const int MAX_STEP_LENGTH_INACCURACY = 10;
+
     /* Konvertiert Grad in Bogemmaß */
     private static double deg_to_rad (uint8 degree) {
         return ((Math.PI / 180) * degree);
@@ -373,7 +379,10 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
         /* Berechnet die fehlenden Angaben anhand der gegebenen Werte */
         public void enhance_data () {
-            /* Länge der Wand mit dem Satz des Pythagoras berechnen */
+            /*
+             * Länge der Wand berechnen
+             * Viele Grüße von Herrn Pythagoras :-)
+             */
             wall_length = (int)(Math.sqrt (Math.pow (relative_end_x - relative_start_x, 2) + Math.pow (relative_end_y - relative_start_y, 2)));
 
             /* Teilen durch Null verhindern */
@@ -399,12 +408,12 @@ public class Simulator.Backend.MappingAlgorithm : Object {
         MarkType type;
 
         /* Gibt an, ob das übergebende Merkmal in der Nähe liegt */
-        public bool is_near (Mark mark) {
+        public bool is_near (Mark mark, int max_distance_gab = MARK_MAX_DISTANCE_GAP) {
             /* Abstand zwischen den Merkmalen berechnen */
             int distance_gap = (int)(Math.sqrt (Math.pow (position_x - mark.position_x, 2) + Math.pow (position_y - mark.position_y, 2)));
 
             /* Zurückgeben, ob die Merkmale nahe beieinander liegen */
-            return (distance_gap <= MARK_MAX_DISTANCE_GAP);
+            return (distance_gap <= max_distance_gab);
         }
     }
 
@@ -438,15 +447,15 @@ public class Simulator.Backend.MappingAlgorithm : Object {
     public Mark[]? last_detected_marks { get; private set; default = null; }
 
     /* Das zuletzt zur Orientierung genutzte Merkmal */
-    public Mark[]? compared_orientation_marks  { get; private set; default = null; }
+    public Mark[]? compared_orientation_marks { get; private set; default = null; }
+
+    /* Die selbstbezüglich ermittelte Roboterposition und Richtung, ausgehend von der Startposition. */
+    public int robot_position_x { get; private set; default = 0; }
+    public int robot_position_y { get; private set; default = 0; }
+    public double robot_direction { get; private set; default = 0; }
 
     /* Speichert die Distanzwerte des momentanen Scanvorganges */
     private Gee.TreeMap<double? , uint16> current_scan;
-
-    /* Die selbstbezüglich ermittelte Roboterposition und Richtung, ausgehend von der Startposition. */
-    private int robot_position_x = 0;
-    private int robot_position_y = 0;
-    private double robot_direction = 0;
 
     /* Der Konstruktor der Klasse, hier sollten die nötigen Funktionen zur Kontrolle des Roboters übergeben werden */
     public MappingAlgorithm (MoveFunc move_func, TurnFunc turn_func, StartNewScanFunc start_new_scan_func) {
@@ -490,24 +499,59 @@ public class Simulator.Backend.MappingAlgorithm : Object {
         /* Nach vergleichbaren Merkmalen suchen */
         Mark[] comparable_marks = search_comparable_marks (marks);
 
-        /* Wurden vergleichbare Merkmale gefunden? */
-        if (comparable_marks.length == 2) {
-            /* Roboterposition neu ermitteln */
-            update_pose (comparable_marks[0], comparable_marks[1]);
+        /*
+         * Geschätzte Schrittrichtung und Länge
+         * TODO: Hier die Motoransteuerungswerte einsetzten
+         */
+        double expected_step_direction = robot_direction + -0.12; /* turning-speed: -20 */
+        int expected_step_length = 8; /* motor-speed: 100 */
 
-            /* Orientierungsmarke speichern */
+        /* Die Informationen über den zurückgelegten Schritt */
+        double step_direction = 0;
+        int step_length = 0;
+
+        /* Wurden vergleichbare Merkmale gefunden? */
+        if (comparable_marks.length == 2 && !comparable_marks[0].is_near (comparable_marks[1], 5)) {
+            /* Roboterdrehung neu ermitteln */
+            step_direction = robot_direction + (comparable_marks[1].direction - comparable_marks[0].direction);
+
+            /* Abstand zwischen den beiden Merkmalen bestimmen */
+            step_length = (int)(Math.sqrt (Math.pow (comparable_marks[1].position_x - comparable_marks[0].position_x, 2) + Math.pow (comparable_marks[1].position_y - comparable_marks[0].position_y, 2)));
+
+            /* Durchschnittlichen Abstand der beiden Merkmale zum Roboter bestimmen */
+            int avg_mark_distance_to_robot = (int)((Math.sqrt (Math.pow (comparable_marks[0].position_x, 2) + Math.pow (comparable_marks[0].position_y, 2)) +
+                                                    Math.sqrt (Math.pow (comparable_marks[1].position_x, 2) + Math.pow (comparable_marks[1].position_y, 2))) / 2);
+
+            /* Durch die Drehung hervorgerufenen Abstand von der Schrittlänge abziehen */
+            step_length -= (int)(Math.sin ((comparable_marks[1].direction - comparable_marks[0].direction) / 2) * avg_mark_distance_to_robot * 2);
+
+            /* Orientierungsmarken speichern */
             compared_orientation_marks = comparable_marks;
         } else {
-            /*
-             * Keine Anhaltspunkte, neue Position abschätzen
-             * TODO: Strecke anhand der Fahrtzeit berechnen
-             */
-            robot_position_x += (int)(Math.sin (robot_direction) * 50);
-            robot_position_y += (int)(Math.cos (robot_direction) * 50);
-
-            /* Keine Orientierungsmarke vorhanden */
+            /* Keine Orientierungsmarken vorhanden */
             compared_orientation_marks = null;
         }
+
+        /* Wurden genauere Schrittinformationen erfasst? */
+        if (compared_orientation_marks == null) {
+            /* Érwartete Informationen übernehmen */
+            step_direction = expected_step_direction;
+            step_length = expected_step_length;
+        } else {
+            /* Abweichung der Informationen überprüfen */
+            if (Math.fabs (step_direction - expected_step_direction) > MAX_STEP_DIRECTION_INACCURACY || (step_length - expected_step_length).abs () > MAX_STEP_LENGTH_INACCURACY) {
+                /* Erwartete Werte stattdessen übernehmen */
+                step_direction = expected_step_direction;
+                step_length = expected_step_length;
+            }
+        }
+
+        /* Roboterposition um einen Schritt ergänzen */
+        robot_position_x -= (int)(Math.sin (step_direction) * step_length);
+        robot_position_y += (int)(Math.cos (step_direction) * step_length);
+
+        /* Roboterrichtung übernehmen */
+        robot_direction = step_direction;
 
         /* Merkmale speichern, damit sie extern abgerufen werden können */
         last_detected_marks = marks;
@@ -516,18 +560,15 @@ public class Simulator.Backend.MappingAlgorithm : Object {
         current_scan = new Gee.TreeMap<double? , uint16> ();
 
         /* Neuen Scanvorgang einleiten */
-        start_new_scan ();
+        Timeout.add (500, () => {
+            start_new_scan ();
+
+            return false;
+        });
     }
 
     /* Sucht ein vorheriges und ein aktuelles Merkmal, das einen Positionsvergleich zulässt */
     private Mark[] search_comparable_marks (Mark[] marks) {
-        /*
-         * - Aktuelle Merkmale durchlaufen
-         * - Jeweils alle vorherigen Merkmale auf dieses aktuelle Merkmal legen und einpassen
-         * - Deckungsgleicheit überprüfen
-         * - Merkmalkombination mit höchster Deckungsgleichheit zurückgeben
-         */
-
         /* Der Rekord an übereinstimmenden Merkmalen */
         int best_accepted_marks = 0;
 
@@ -597,8 +638,8 @@ public class Simulator.Backend.MappingAlgorithm : Object {
             double new_direction = Math.atan ((double)(new_position_y - target_mark.position_y) / (double)(new_position_x - target_mark.position_x)) + rotating_angle;
 
             /* Punkt nach Verschiebung durch den Winkel nach gegebenem Abstand neu positionieren */
-            new_position_x += (int)(Math.sin (new_direction) * distance_to_target_mark);
-            new_position_x += (int)(Math.sin (new_direction) * distance_to_target_mark);
+            new_position_x -= (int)(Math.sin (new_direction) * distance_to_target_mark);
+            new_position_y += (int)(Math.cos (new_direction) * distance_to_target_mark);
 
             /* Verschobenes Merkmal erstellen */
             Mark rotatetd_mark = {
@@ -614,9 +655,5 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
         /* Transformierte Merkmale zurückgeben */
         return rotated_marks;
-    }
-
-    /* Berechnet anhand eines Merkmals die neue Position und Richtung des Roboters */
-    private void update_pose (Mark previous_mark, Mark mark) {
     }
 }

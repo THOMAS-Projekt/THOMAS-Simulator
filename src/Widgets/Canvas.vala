@@ -35,11 +35,17 @@ public class Simulator.Widgets.Canvas : Gtk.DrawingArea {
     private double field_width;
     private double field_height;
 
+    private double robot_start_position_x;
+    private double robot_start_position_y;
+
     public Canvas (Backend.Room room, Backend.Robot robot, Backend.MappingAlgorithm algorithm) {
         Object (room: room, robot: robot, algorithm: algorithm);
 
         room_width = room.get_width ();
         room_height = room.get_height ();
+
+        robot_start_position_x = robot.position_x;
+        robot_start_position_y = robot.position_y;
 
         request_size ();
         connect_signals ();
@@ -70,8 +76,11 @@ public class Simulator.Widgets.Canvas : Gtk.DrawingArea {
 
         Gdk.cairo_set_source_rgba (context, color);
 
+        context.save ();
+
         draw_room (context);
         draw_robot (context);
+        draw_calculated_robot (context);
         draw_last_scan (context);
         draw_last_detected_walls (context);
         draw_last_detected_marks (context);
@@ -110,6 +119,21 @@ public class Simulator.Widgets.Canvas : Gtk.DrawingArea {
 
         context.move_to (field_width * 0.8, field_width * 0.8);
         context.show_text ("x=%f, y=%f, r=%f".printf (robot.position_x, robot.position_y, robot.direction % (2 * Math.PI)));
+        context.stroke ();
+
+        context.restore ();
+    }
+
+    private void draw_calculated_robot (Cairo.Context context) {
+        context.translate (((double)algorithm.robot_position_x / 30 + robot_start_position_x) * field_width, ((double)algorithm.robot_position_y / 30 + robot_start_position_y) * field_height);
+        context.rotate (algorithm.robot_direction);
+
+        context.set_source_rgba (0, 0.7, 0, 0.5);
+        context.arc (0, 0, field_width * 0.9, 0, 2 * Math.PI);
+        context.move_to (-10, -10);
+        context.line_to (0, 10);
+        context.line_to (10, -10);
+        context.stroke ();
 
         context.restore ();
     }
@@ -191,7 +215,7 @@ public class Simulator.Widgets.Canvas : Gtk.DrawingArea {
             double real_position_y = ((double)algorithm.compared_orientation_marks[i].position_y / 30) * field_width;
 
             context.set_line_width (2);
-            context.set_source_rgba (1, 0, 1, 1);
+            context.set_source_rgba (1, i, 1, 1);
             context.arc (real_position_x, real_position_y, 10, 0, 2 * Math.PI);
             context.stroke ();
 
