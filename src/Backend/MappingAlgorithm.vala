@@ -30,6 +30,9 @@
 public class Simulator.Backend.MappingAlgorithm : Object {
     /* Klasse mit einigen Hilfsfunktionen zur Darstellung einer Karte mit unbekannten Ausmaßen in alle vier Richtungen */
     private class Map {
+        /* Die Größe eines Feldes in cm. */
+        private static const int FIELD_SIZE = 20;
+
         /* Eine Struktur, die die Koordinate eines Feldes enthält */
         private struct FieldCoordinate {
             int x;
@@ -352,6 +355,53 @@ public class Simulator.Backend.MappingAlgorithm : Object {
         return marks;
     }
 
+    /* Rotiert die vorherigen Merkmale um ein Hauptmerkmal, sodass eine Deckungsgleichheit zum Zielmerkmal entsteht */
+    private static Mark[] rotate_marks (Mark[] old_marks, Mark old_main_mark, Mark target_mark) {
+        /* Die transformierten Merkmale */
+        Mark[] rotated_marks = {};
+
+        /* Die Verschiebung des Merkmals */
+        int mark_movement_x = target_mark.position_x - old_main_mark.position_x;
+        int mark_movement_y = target_mark.position_y - old_main_mark.position_y;
+
+        /* Richtungsdifferenz; Alle anderen Merkmale müssen mit diesem Winkel um das Hauptmerkmal herum gedreht werden */
+        double rotating_angle = target_mark.direction - old_main_mark.direction;
+
+        /* Alte Merkmale durchlaufen und nacheinander transformieren */
+        for (int i = 0; i < old_marks.length; i++) {
+            /* Merkmal abrufen */
+            Mark mark = old_marks[i];
+
+            /* Neue Position bestimmen */
+            int new_position_x = mark.position_x + mark_movement_x;
+            int new_position_y = mark.position_y + mark_movement_y;
+
+            /* Abstand der Marke zum Dreh-Mittelpunkt bestimmen */
+            int distance_to_target_mark = (int)(Math.sqrt (Math.pow (new_position_x - target_mark.position_x, 2) + Math.pow (new_position_y - target_mark.position_y, 2)));
+
+            /* Neuen Winkel berechnen */
+            double new_direction = Math.atan ((double)(new_position_y - target_mark.position_y) / (double)(new_position_x - target_mark.position_x)) + rotating_angle;
+
+            /* Punkt nach Verschiebung durch den Winkel nach gegebenem Abstand neu positionieren */
+            new_position_x -= (int)(Math.sin (new_direction) * distance_to_target_mark);
+            new_position_y += (int)(Math.cos (new_direction) * distance_to_target_mark);
+
+            /* Verschobenes Merkmal erstellen */
+            Mark rotatetd_mark = {
+                new_position_x,
+                new_position_y,
+                new_direction,
+                MarkType.CORNER
+            };
+
+            /* Merkmal zur Liste hinzufügen */
+            rotated_marks += mark;
+        }
+
+        /* Transformierte Merkmale zurückgeben */
+        return rotated_marks;
+    }
+
     /* Stellt eine automatisch erkannte Wand dar */
     public struct Wall {
         /* Winkel des Startpunktes im Messbereich des Roboters */
@@ -608,52 +658,5 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
         /* Merkmalspaar zurückgeben */
         return comparable_marks;
-    }
-
-    /* Rotiert die vorherigen Merkmale um ein Hauptmerkmal, sodass eine Deckungsgleichheit zum Zielmerkmal entsteht */
-    private Mark[] rotate_marks (Mark[] old_marks, Mark old_main_mark, Mark target_mark) {
-        /* Die transformierten Merkmale */
-        Mark[] rotated_marks = {};
-
-        /* Die Verschiebung des Merkmals */
-        int mark_movement_x = target_mark.position_x - old_main_mark.position_x;
-        int mark_movement_y = target_mark.position_y - old_main_mark.position_y;
-
-        /* Richtungsdifferenz; Alle anderen Merkmale müssen mit diesem Winkel um das Hauptmerkmal herum gedreht werden */
-        double rotating_angle = target_mark.direction - old_main_mark.direction;
-
-        /* Alte Merkmale durchlaufen und nacheinander transformieren */
-        for (int i = 0; i < old_marks.length; i++) {
-            /* Merkmal abrufen */
-            Mark mark = old_marks[i];
-
-            /* Neue Position bestimmen */
-            int new_position_x = mark.position_x + mark_movement_x;
-            int new_position_y = mark.position_y + mark_movement_y;
-
-            /* Abstand der Marke zum Dreh-Mittelpunkt bestimmen */
-            int distance_to_target_mark = (int)(Math.sqrt (Math.pow (new_position_x - target_mark.position_x, 2) + Math.pow (new_position_y - target_mark.position_y, 2)));
-
-            /* Neuen Winkel berechnen */
-            double new_direction = Math.atan ((double)(new_position_y - target_mark.position_y) / (double)(new_position_x - target_mark.position_x)) + rotating_angle;
-
-            /* Punkt nach Verschiebung durch den Winkel nach gegebenem Abstand neu positionieren */
-            new_position_x -= (int)(Math.sin (new_direction) * distance_to_target_mark);
-            new_position_y += (int)(Math.cos (new_direction) * distance_to_target_mark);
-
-            /* Verschobenes Merkmal erstellen */
-            Mark rotatetd_mark = {
-                new_position_x,
-                new_position_y,
-                new_direction,
-                MarkType.CORNER
-            };
-
-            /* Merkmal zur Liste hinzufügen */
-            rotated_marks += mark;
-        }
-
-        /* Transformierte Merkmale zurückgeben */
-        return rotated_marks;
     }
 }
