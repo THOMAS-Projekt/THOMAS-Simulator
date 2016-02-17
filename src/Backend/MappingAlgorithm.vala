@@ -34,9 +34,10 @@ public class Simulator.Backend.MappingAlgorithm : Object {
         private static const int FIELD_SIZE = 20;
 
         /* Eine Struktur, die die Koordinate eines Feldes enthält */
-        private struct FieldCoordinate {
+        public struct Field {
             int x;
             int y;
+            FieldState state;
         }
 
         /* Die drei verschiedene Zustände eines Feldes der Karte */
@@ -54,21 +55,33 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
         /*
          * Das Koordinatensystem
-         * Die Verwendung einer TreeMap stellt hier einen Workaround für einen Fehler in mehrdimensionalen Arrays dar.
+         * FIXME: Die Verwendung einer ArrayList stellt hier einen Workaround für einen Fehler in mehrdimensionalen Arrays dar.
          * Siehe https://bugzilla.gnome.org/show_bug.cgi?id=735159
          */
-        private Gee.TreeMap<FieldCoordinate? , FieldState> map;
+        public Gee.ArrayList<Field? > map { get; private set; }
 
         /* Erstellt eine neue Umgebungskarte */
         public Map () {
             /* Koordinatenliste erstellen */
-            map = new Gee.TreeMap<FieldCoordinate? , FieldState> ();
+            map = new Gee.ArrayList<Field? > ();
         }
 
         /* Setzt den Zustand eines Feldes */
         public void set_field_state (int x, int y, FieldState state) {
+            /* Vorherige Felder mit gleicher Position löschen */
+            foreach (Field field in map) {
+                /* Ist dies der gesuchte Eintrag? */
+                if (field.x == x && field.y == y) {
+                    /* Eintrag löschen */
+                    map.remove (field);
+
+                    /* Suche beenden */
+                    break;
+                }
+            }
+
             /* Zustand speichern */
-            map.@set ({ x, y }, state);
+            map.add ({ x, y, state });
 
             /* Ausmaßen aktualisieren */
             min_x = (x < min_x ? x : min_x);
@@ -79,26 +92,36 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
         /* Ruft den Zustand eines Feldes ab */
         public FieldState get_field_state (int x, int y) {
-            /* Koordinatenstruktur erstellen */
-            FieldCoordinate coordinate = { x, y };
+            /* Der gefundene Zustand */
+            FieldState state = FieldState.UNKNOWN;
 
-            /* Falls nicht gesetzt ist das Feld "Unbekannt" */
-            if (!map.has_key (coordinate)) {
-                return FieldState.UNKNOWN;
+            /* FIXME: Da ein direkter Vergleich der Structs nicht möglich ist, muss manuell in der Liste gesucht werden */
+            foreach (Field field in map) {
+                /* Ist dies der gesuchte Eintrag? */
+                if (field.x == x && field.y == y) {
+                    /* Zustand auslesen */
+                    state = field.state;
+
+                    /* Suche beenden */
+                    break;
+                }
             }
 
             /* Zustand zurückgeben */
-            return map.@get (coordinate);
+            return state;
         }
 
         /* Belegt alle Felder entlang einer Wand augeghend von der Roboterposition */
         public void set_wall_fields (int position_x, int position_y, double direction, Wall wall) {
-            /* Absolute Koordinaten der Start- und Endpunkte der Wand auf der Karte bestimmen */
-            int wall_start_x = (int)(position_x - (Math.sin (direction) * wall.relative_start_x));
-            int wall_start_y = (int)(position_y + (Math.cos (direction) * wall.relative_start_y));
-            int wall_end_x = (int)(position_x - (Math.sin (direction) * wall.relative_end_x));
-            int wall_end_y = (int)(position_y + (Math.cos (direction) * wall.relative_end_y));
+            int[] rotated_start = outer_rotate (wall.relative_start_x, wall.relative_start_y, direction);
+            int[] rotated_end = outer_rotate (wall.relative_end_x, wall.relative_end_y, direction);
 
+            /* Absolute Koordinaten der Start- und Endpunkte der Wand auf der Karte bestimmen */
+            int wall_start_x = (int)(position_x - rotated_start[0]);
+            int wall_start_y = (int)(position_y + rotated_start[1]);
+            int wall_end_x = (int)(position_x - rotated_end[0]);
+            int wall_end_y = (int)(position_y + rotated_end[1]);
+debug ("%i -> %i",wall.relative_start_x,wall_start_x);
             /* Prüfen, an welcher Achse man sich orientieren sollte */
             if (wall_start_x != wall_end_x) {
                 /* Inkrementor in y-Richtung pro Schritt auf der x-Achse bestimmen */
@@ -125,6 +148,28 @@ public class Simulator.Backend.MappingAlgorithm : Object {
                     set_field_state (x / FIELD_SIZE, y / FIELD_SIZE, FieldState.WALL);
                 }
             }
+        }
+
+        /* Dreht die Koordinaten eines Punktes mit dem angegebenen Winkel um den Ursprung herum */
+        private int[] outer_rotate (int x, int y, double direction) {
+            /* Abstand des Punktes zum Ursprung bestimmen */
+            int distance_to_point = (int)(Math.sqrt (Math.pow (x, 2) + Math.pow (y, 2)));
+
+            // Der neue Winkel
+            double new_direction = (Math.PI / 2) + direction;
+
+            /* Teilen durch 0 verhindern */
+            if (x != 0) {
+                /* Neuen Winkel berechnen */
+                new_direction = Math.atan ((double)y / (double)x) + direction;
+            }
+debug (new_direction.to_string());
+            /* Punkt nach Verschiebung durch den Winkel nach gegebenem Abstand neu positionieren */
+            int new_position_x = (int)(Math.cos (new_direction) * distance_to_point);
+            int new_position_y = (int)(Math.sin (new_direction) * distance_to_point);
+
+            /* Neue Koordinaten zurückgeben */
+            return { new_position_x, new_position_y };
         }
     }
 
@@ -461,7 +506,7 @@ public class Simulator.Backend.MappingAlgorithm : Object {
             };
 
             /* Merkmal zur Liste hinzufügen */
-            rotated_marks += mark;
+            rotated_marks += rotatetd_mark;
         }
 
         /* Transformierte Merkmale zurückgeben */
@@ -622,7 +667,7 @@ public class Simulator.Backend.MappingAlgorithm : Object {
          * Geschätzte Schrittrichtung und Länge
          * TODO: Hier die Motoransteuerungswerte einsetzten
          */
-        double expected_step_direction = robot_direction + -0.12; /* turning-speed: -20 */
+        double expected_step_direction = robot_direction; // + -0.12; /* turning-speed: -20 */
         int expected_step_length = 8; /* motor-speed: 100 */
 
         /* Die Informationen über den zurückgelegten Schritt */
@@ -678,7 +723,8 @@ public class Simulator.Backend.MappingAlgorithm : Object {
         /* Wände durchlaufen */
         foreach (Wall wall in walls) {
             /* Wand in die Karte einzeichnen */
-            map.set_wall_fields (robot_position_x, robot_position_y, robot_direction, wall);
+            //map.set_wall_fields (robot_position_x, robot_position_y, robot_direction, wall);
+            map.set_wall_fields (0,0,0,{0,-100,20,0,20,100});
         }
 
         /* Die Karte wurde aktualisiert */
