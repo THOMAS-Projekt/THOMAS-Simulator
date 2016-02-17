@@ -31,6 +31,8 @@ public class Simulator.MainWindow : Gtk.Window {
 
     private Widgets.Canvas canvas;
 
+    private MapWindow map_window;
+
     private int map_id = 0;
 
     public MainWindow (Simulator.Application application) {
@@ -74,6 +76,10 @@ public class Simulator.MainWindow : Gtk.Window {
         });
 
         build_ui ();
+
+        map_window = new MapWindow (algorithm);
+        map_window.set_keep_above (true);
+        map_window.show_all ();
     }
 
     private void build_ui () {

@@ -29,7 +29,7 @@
  */
 public class Simulator.Backend.MappingAlgorithm : Object {
     /* Klasse mit einigen Hilfsfunktionen zur Darstellung einer Karte mit unbekannten Ausmaßen in alle vier Richtungen */
-    private class Map {
+    public class Map {
         /* Die Größe eines Feldes in cm. */
         private static const int FIELD_SIZE = 20;
 
@@ -45,6 +45,12 @@ public class Simulator.Backend.MappingAlgorithm : Object {
             FREE,
             WALL
         }
+
+        /* Die Ausmaßen der Karte */
+        public int min_x { get; private set; default = 0; }
+        public int max_x { get; private set; default = 0; }
+        public int min_y { get; private set; default = 0; }
+        public int max_y { get; private set; default = 0; }
 
         /*
          * Das Koordinatensystem
@@ -63,6 +69,12 @@ public class Simulator.Backend.MappingAlgorithm : Object {
         public void set_field_state (int x, int y, FieldState state) {
             /* Zustand speichern */
             map.@set ({ x, y }, state);
+
+            /* Ausmaßen aktualisieren */
+            min_x = (x < min_x ? x : min_x);
+            max_x = (x > max_x ? x : max_x);
+            min_y = (y < min_y ? y : min_y);
+            max_y = (y > max_y ? y : max_y);
         }
 
         /* Ruft den Zustand eines Feldes ab */
@@ -77,6 +89,42 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
             /* Zustand zurückgeben */
             return map.@get (coordinate);
+        }
+
+        /* Belegt alle Felder entlang einer Wand augeghend von der Roboterposition */
+        public void set_wall_fields (int position_x, int position_y, double direction, Wall wall) {
+            /* Absolute Koordinaten der Start- und Endpunkte der Wand auf der Karte bestimmen */
+            int wall_start_x = (int)(position_x - (Math.sin (direction) * wall.relative_start_x));
+            int wall_start_y = (int)(position_y + (Math.cos (direction) * wall.relative_start_y));
+            int wall_end_x = (int)(position_x - (Math.sin (direction) * wall.relative_end_x));
+            int wall_end_y = (int)(position_y + (Math.cos (direction) * wall.relative_end_y));
+
+            /* Prüfen, an welcher Achse man sich orientieren sollte */
+            if (wall_start_x != wall_end_x) {
+                /* Inkrementor in y-Richtung pro Schritt auf der x-Achse bestimmen */
+                double incrementor = (double)(wall_start_y - wall_end_y) / (wall_start_x - wall_end_x);
+
+                /* x-Achse entlanglaufen */
+                for (int x = (wall_start_x < wall_end_x ? wall_start_x : wall_end_x); x < (wall_start_x < wall_end_x ? wall_end_x : wall_start_x); x++) {
+                    /* y-Koordinate bestimmen */
+                    int y = (int)((wall_start_y < wall_end_y ? wall_start_y : wall_end_y) + (incrementor * x));
+
+                    /* Zustand des Feldes setzen */
+                    set_field_state (x / FIELD_SIZE, y / FIELD_SIZE, FieldState.WALL);
+                }
+            } else if (wall_start_y != wall_end_y) {
+                /* Inkrementor in x-Richtung pro Schritt auf der y-Achse bestimmen */
+                double incrementor = (double)(wall_start_x - wall_end_x) / (wall_start_y - wall_end_y);
+
+                /* y-Achse entlanglaufen */
+                for (int y = (wall_start_y < wall_end_y ? wall_start_y : wall_end_y); y < (wall_start_y < wall_end_y ? wall_end_y : wall_start_y); y++) {
+                    /* x-Koordinate bestimmen */
+                    int x = (int)((wall_start_x < wall_end_x ? wall_start_x : wall_end_x) + (incrementor * y));
+
+                    /* Zustand des Feldes setzen */
+                    set_field_state (x / FIELD_SIZE, y / FIELD_SIZE, FieldState.WALL);
+                }
+            }
         }
     }
 
@@ -272,13 +320,10 @@ public class Simulator.Backend.MappingAlgorithm : Object {
         return walls;
     }
 
-    /* Stellt aus den Wanddaten Merkmale heraus und gibt diese zurück */
-    private static Mark[] detect_marks (Wall[] walls) {
-        /* Liste der erkannten Merkmale */
-        Mark[] marks = {};
-
-        /* Merkt sich die vorherige Wand */
-        Wall? last_wall = null;
+    /* Filtert die Liste der Wände nach deren Entfernung zum Roboter. */
+    private static Wall[] filter_walls (Wall[] walls) {
+        /* Liste der gefilterten Wände */
+        Wall[] filtered_walls = {};
 
         /* Alle Wände durchlaufen */
         for (int i = 0; i < walls.length; i++) {
@@ -296,6 +341,27 @@ public class Simulator.Backend.MappingAlgorithm : Object {
             if (distance_gap > MAX_DETECTION_RADIUS) {
                 continue;
             }
+
+            /* Wand übernehmen */
+            filtered_walls += wall;
+        }
+
+        /* Gefilterte Liste zurückgeben */
+        return filtered_walls;
+    }
+
+    /* Stellt aus den Wanddaten Merkmale heraus und gibt diese zurück */
+    private static Mark[] detect_marks (Wall[] walls) {
+        /* Liste der erkannten Merkmale */
+        Mark[] marks = {};
+
+        /* Merkt sich die vorherige Wand */
+        Wall? last_wall = null;
+
+        /* Alle Wände durchlaufen */
+        for (int i = 0; i < walls.length; i++) {
+            /* Wandinformationen abrufen */
+            Wall wall = walls[i];
 
             /* Mit der zweiten Wand beginnen */
             if (last_wall != null) {
@@ -507,6 +573,9 @@ public class Simulator.Backend.MappingAlgorithm : Object {
     /* Speichert die Distanzwerte des momentanen Scanvorganges */
     private Gee.TreeMap<double? , uint16> current_scan;
 
+    /* Wird ausgelöst, wenn die Umgebungskarte aktualisiert wurde */
+    public signal void map_changed (Map map);
+
     /* Der Konstruktor der Klasse, hier sollten die nötigen Funktionen zur Kontrolle des Roboters übergeben werden */
     public MappingAlgorithm (MoveFunc move_func, TurnFunc turn_func, StartNewScanFunc start_new_scan_func) {
         /* Funktionen global zuweisen */
@@ -537,8 +606,8 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
     /* Sollte aufgerufen werden, wenn der Scanvorgang einer Karte abgeschlossen wurde */
     public void handle_map_scan_finished (int map_id) {
-        /* Wände anhand der Messdaten detektieren */
-        Wall[] walls = detect_walls (current_scan);
+        /* Wände anhand der Messdaten detektieren und direkt filtern */
+        Wall[] walls = filter_walls (detect_walls (current_scan));
 
         /* Wände speichern, damit sie extern abgerufen werden können */
         last_detected_walls = walls;
@@ -605,6 +674,15 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
         /* Merkmale speichern, damit sie extern abgerufen werden können */
         last_detected_marks = marks;
+
+        /* Wände durchlaufen */
+        foreach (Wall wall in walls) {
+            /* Wand in die Karte einzeichnen */
+            map.set_wall_fields (robot_position_x, robot_position_y, robot_direction, wall);
+        }
+
+        /* Die Karte wurde aktualisiert */
+        map_changed (map);
 
         /* Neue Messreihe beginnen */
         current_scan = new Gee.TreeMap<double? , uint16> ();

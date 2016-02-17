@@ -4,7 +4,9 @@ vala_precompile (VALA_C
     config.vala
     Application.vala
     MainWindow.vala
+    MapWindow.vala
     Widgets/Canvas.vala
+    Widgets/MapCanvas.vala
     Backend/Room.vala
     Backend/Robot.vala
     Backend/MappingAlgorithm.vala
