@@ -33,6 +33,9 @@ public class Simulator.Backend.MappingAlgorithm : Object {
         /* Die Größe eines Feldes in cm. */
         private static const int FIELD_SIZE = 20;
 
+        /* Die ungefähre Größe des Roboters in cm. */
+        private static const int ROBOT_SIZE = 80;
+
         /* Eine Struktur, die die Koordinate eines Feldes enthält */
         public struct Field {
             int x;
@@ -67,11 +70,17 @@ public class Simulator.Backend.MappingAlgorithm : Object {
         }
 
         /* Setzt den Zustand eines Feldes */
-        public void set_field_state (int x, int y, FieldState state) {
+        public void set_field_state (int x, int y, FieldState state, FieldState? previous_state = null) {
             /* Vorherige Felder mit gleicher Position löschen */
             foreach (Field field in map) {
                 /* Ist dies der gesuchte Eintrag? */
                 if (field.x == x && field.y == y) {
+                    /* Wird ein vorheriger Zustand erwartet? */
+                    if (previous_state != null && field.state != previous_state) {
+                        /* Dieser Eintrag sollte nicht gesetzt werden */
+                        return;
+                    }
+
                     /* Eintrag löschen */
                     map.remove (field);
 
@@ -113,63 +122,58 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
         /* Belegt alle Felder entlang einer Wand augeghend von der Roboterposition */
         public void set_wall_fields (int position_x, int position_y, double direction, Wall wall) {
-            int[] rotated_start = outer_rotate (wall.relative_start_x, wall.relative_start_y, direction);
-            int[] rotated_end = outer_rotate (wall.relative_end_x, wall.relative_end_y, direction);
-
             /* Absolute Koordinaten der Start- und Endpunkte der Wand auf der Karte bestimmen */
-            int wall_start_x = (int)(position_x - rotated_start[0]);
-            int wall_start_y = (int)(position_y + rotated_start[1]);
-            int wall_end_x = (int)(position_x - rotated_end[0]);
-            int wall_end_y = (int)(position_y + rotated_end[1]);
-debug ("%i -> %i",wall.relative_start_x,wall_start_x);
+            int wall_start_x = (int)(position_x + (Math.cos (direction) * wall.relative_start_x - (Math.sin (direction) * wall.relative_start_y)));
+            int wall_start_y = (int)(position_y + (Math.cos (direction) * wall.relative_start_y + (Math.sin (direction) * wall.relative_start_x)));
+            int wall_end_x = (int)(position_x + (Math.cos (direction) * wall.relative_end_x - (Math.sin (direction) * wall.relative_end_y)));
+            int wall_end_y = (int)(position_y + (Math.cos (direction) * wall.relative_end_y + (Math.sin (direction) * wall.relative_end_x)));
+
             /* Prüfen, an welcher Achse man sich orientieren sollte */
             if (wall_start_x != wall_end_x) {
                 /* Inkrementor in y-Richtung pro Schritt auf der x-Achse bestimmen */
-                double incrementor = (double)(wall_start_y - wall_end_y) / (wall_start_x - wall_end_x);
+                double incrementor = (wall_start_y - wall_end_y) / (wall_start_x - wall_end_x);
 
                 /* x-Achse entlanglaufen */
-                for (int x = (wall_start_x < wall_end_x ? wall_start_x : wall_end_x); x < (wall_start_x < wall_end_x ? wall_end_x : wall_start_x); x++) {
+                for (double x = (wall_start_x < wall_end_x ? wall_start_x : wall_end_x); x < (wall_start_x < wall_end_x ? wall_end_x : wall_start_x); x++) {
                     /* y-Koordinate bestimmen */
-                    int y = (int)((wall_start_y < wall_end_y ? wall_start_y : wall_end_y) + (incrementor * x));
+                    double y = (wall_start_x < wall_end_x ? wall_start_y : wall_end_y) + (incrementor * (x - (wall_start_x < wall_end_x ? wall_start_x : wall_end_x)));
 
                     /* Zustand des Feldes setzen */
-                    set_field_state (x / FIELD_SIZE, y / FIELD_SIZE, FieldState.WALL);
+                    set_field_state ((int)(x / FIELD_SIZE), (int)(y / FIELD_SIZE), FieldState.WALL);
                 }
             } else if (wall_start_y != wall_end_y) {
                 /* Inkrementor in x-Richtung pro Schritt auf der y-Achse bestimmen */
-                double incrementor = (double)(wall_start_x - wall_end_x) / (wall_start_y - wall_end_y);
+                double incrementor = (wall_start_x - wall_end_x) / (wall_start_y - wall_end_y);
 
                 /* y-Achse entlanglaufen */
-                for (int y = (wall_start_y < wall_end_y ? wall_start_y : wall_end_y); y < (wall_start_y < wall_end_y ? wall_end_y : wall_start_y); y++) {
+                for (double y = (wall_start_y < wall_end_y ? wall_start_y : wall_end_y); y < (wall_start_y < wall_end_y ? wall_end_y : wall_start_y); y++) {
                     /* x-Koordinate bestimmen */
-                    int x = (int)((wall_start_x < wall_end_x ? wall_start_x : wall_end_x) + (incrementor * y));
+                    double x = (wall_start_y < wall_end_y ? wall_start_x : wall_end_x) + (incrementor * (y - (wall_start_y < wall_end_y ? wall_start_y : wall_end_y)));
 
                     /* Zustand des Feldes setzen */
-                    set_field_state (x / FIELD_SIZE, y / FIELD_SIZE, FieldState.WALL);
+                    set_field_state ((int)(x / FIELD_SIZE), (int)(y / FIELD_SIZE), FieldState.WALL);
                 }
             }
         }
 
-        /* Dreht die Koordinaten eines Punktes mit dem angegebenen Winkel um den Ursprung herum */
-        private int[] outer_rotate (int x, int y, double direction) {
-            /* Abstand des Punktes zum Ursprung bestimmen */
-            int distance_to_point = (int)(Math.sqrt (Math.pow (x, 2) + Math.pow (y, 2)));
+        /* Markiert die Felder, auf denen sich der Roboter gerade befindet, als frei */
+        public void mark_visited_fields (int position_x, int position_y) {
+            /* Robotergröße in Felder umrechnen */
+            int robot_fields = ROBOT_SIZE / FIELD_SIZE;
 
-            // Der neue Winkel
-            double new_direction = (Math.PI / 2) + direction;
+            /* Roboterposition in Felder umrechnen */
+            int position_fields_x = position_x / FIELD_SIZE;
+            int position_fields_y = position_y / FIELD_SIZE;
 
-            /* Teilen durch 0 verhindern */
-            if (x != 0) {
-                /* Neuen Winkel berechnen */
-                new_direction = Math.atan ((double)y / (double)x) + direction;
+            /* Durch den Roboter bedeckte Felder durchlaufen */
+            for (int x = 0; x < robot_fields; x++) {
+                for (int y = 0; y < robot_fields; y++) {
+                    int field_x = position_fields_x - (robot_fields / 2) + x;
+                    int field_y = position_fields_y - (robot_fields / 2) + y;
+
+                    set_field_state (field_x, field_y, FieldState.FREE, FieldState.UNKNOWN);
+                }
             }
-debug (new_direction.to_string());
-            /* Punkt nach Verschiebung durch den Winkel nach gegebenem Abstand neu positionieren */
-            int new_position_x = (int)(Math.cos (new_direction) * distance_to_point);
-            int new_position_y = (int)(Math.sin (new_direction) * distance_to_point);
-
-            /* Neue Koordinaten zurückgeben */
-            return { new_position_x, new_position_y };
         }
     }
 
@@ -667,7 +671,7 @@ debug (new_direction.to_string());
          * Geschätzte Schrittrichtung und Länge
          * TODO: Hier die Motoransteuerungswerte einsetzten
          */
-        double expected_step_direction = robot_direction; // + -0.12; /* turning-speed: -20 */
+        double expected_step_direction = robot_direction + -0.12; /* turning-speed: -20 */
         int expected_step_length = 8; /* motor-speed: 100 */
 
         /* Die Informationen über den zurückgelegten Schritt */
@@ -723,9 +727,11 @@ debug (new_direction.to_string());
         /* Wände durchlaufen */
         foreach (Wall wall in walls) {
             /* Wand in die Karte einzeichnen */
-            //map.set_wall_fields (robot_position_x, robot_position_y, robot_direction, wall);
-            map.set_wall_fields (0,0,0,{0,-100,20,0,20,100});
+            map.set_wall_fields (robot_position_x, robot_position_y, robot_direction, wall);
         }
+
+        /* Aktuelle Roboterposition als "Frei" kennzeichnen */
+        map.mark_visited_fields (robot_position_x, robot_position_y);
 
         /* Die Karte wurde aktualisiert */
         map_changed (map);

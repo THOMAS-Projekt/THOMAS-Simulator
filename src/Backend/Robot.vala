@@ -21,7 +21,7 @@
 
 public class Simulator.Backend.Robot : Object {
     private static const short MAX_ACCELERATION = 15;
-    private static const bool USE_INACCURACY = false;
+    private static const bool USE_INACCURACY = true;
 
     public Room room { private get; construct; }
 
@@ -60,7 +60,7 @@ public class Simulator.Backend.Robot : Object {
         });
         
         set_motor_speed (100);
-        //set_motor_turning_speed (-20);
+        set_motor_turning_speed (-20);
     }
 
     public void set_motor_speed (short speed) {
