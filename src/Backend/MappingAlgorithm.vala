@@ -31,10 +31,10 @@ public class Simulator.Backend.MappingAlgorithm : Object {
     /* Klasse mit einigen Hilfsfunktionen zur Darstellung einer Karte mit unbekannten Ausmaßen in alle vier Richtungen */
     public class Map {
         /* Die Größe eines Feldes in cm. */
-        private static const int FIELD_SIZE = 20;
+        private static const int FIELD_SIZE = 10;
 
         /* Die ungefähre Größe des Roboters in cm. */
-        private static const int ROBOT_SIZE = 80;
+        private static const int ROBOT_SIZE = 60;
 
         /* Eine Struktur, die die Koordinate eines Feldes enthält */
         public struct Field {
@@ -139,7 +139,7 @@ public class Simulator.Backend.MappingAlgorithm : Object {
                     double y = (wall_start_x < wall_end_x ? wall_start_y : wall_end_y) + (incrementor * (x - (wall_start_x < wall_end_x ? wall_start_x : wall_end_x)));
 
                     /* Zustand des Feldes setzen */
-                    set_field_state ((int)(x / FIELD_SIZE), (int)(y / FIELD_SIZE), FieldState.WALL);
+                    set_field_state ((int)(x / FIELD_SIZE), (int)(y / FIELD_SIZE), FieldState.WALL, Map.FieldState.UNKNOWN);
                 }
             } else if (wall_start_y != wall_end_y) {
                 /* Inkrementor in x-Richtung pro Schritt auf der y-Achse bestimmen */
@@ -151,7 +151,7 @@ public class Simulator.Backend.MappingAlgorithm : Object {
                     double x = (wall_start_y < wall_end_y ? wall_start_x : wall_end_x) + (incrementor * (y - (wall_start_y < wall_end_y ? wall_start_y : wall_end_y)));
 
                     /* Zustand des Feldes setzen */
-                    set_field_state ((int)(x / FIELD_SIZE), (int)(y / FIELD_SIZE), FieldState.WALL);
+                    set_field_state ((int)(x / FIELD_SIZE), (int)(y / FIELD_SIZE), FieldState.WALL, Map.FieldState.UNKNOWN);
                 }
             }
         }
@@ -168,12 +168,101 @@ public class Simulator.Backend.MappingAlgorithm : Object {
             /* Durch den Roboter bedeckte Felder durchlaufen */
             for (int x = 0; x < robot_fields; x++) {
                 for (int y = 0; y < robot_fields; y++) {
+                    /* Feld bestimmen */
                     int field_x = position_fields_x - (robot_fields / 2) + x;
                     int field_y = position_fields_y - (robot_fields / 2) + y;
 
+                    /* Falls das Feld nicht gesetzt war, dieses auf "Frei" setzen */
                     set_field_state (field_x, field_y, FieldState.FREE, FieldState.UNKNOWN);
                 }
             }
+        }
+
+        public double? get_first_free_way (int position_x, int position_y, bool allow_revisiting = false) {
+            /* Gibt an, ob ein möglicher Weg begonnen hat */
+            bool way_started = false;
+
+            /* Informationen über den Startpunkt eines Weges */
+            int way_start_x = 0;
+            int way_start_y = 0;
+            double way_start_direction = 0;
+
+            /* Mehrere Scans mit steigendem Abstand zum Roboter durchführen */
+            for (int i = 2; i < 6; i++) {
+                /* Zuletzt geprüfter Winkel */
+                double direction = 0;
+
+                /* Koordinaten des zuletzt geprüften Feldes */
+                int field_x = 0;
+                int field_y = 0;
+
+                /* Umgebung des Roboters vollständig abscannen */
+                for (int j = -180; j < 180; j++) {
+                    /* Winkel in Bogenmaß umrechnen */
+                    direction = (Math.PI / 180) * j;
+
+                    /* Koordinaten des zu prüfenden Feldes bestimmen */
+                    field_x = (int)((position_x / FIELD_SIZE) + (Math.cos (direction) * i));
+                    field_y = (int)((position_y / FIELD_SIZE) + (Math.sin (direction) * i));
+
+                    /* Zustand des Feldes bestimmen */
+                    FieldState field_state = get_field_state (field_x, field_y);
+                    bool is_free = field_state == FieldState.UNKNOWN || (allow_revisiting && field_state == FieldState.FREE);
+
+                    /* Hat bereits ein Weg begonnen? */
+                    if (way_started) {
+                        /* Ist der Weg am entsprechenden Winkel weiterhin frei? */
+                        if (!is_free) {
+                            /* Der Weg ist zuende, Wegesbreite (bzw. Länge des Einganges) bestimmen */
+                            int way_length = (int)(Math.sqrt (Math.pow (field_x - way_start_x, 2) + Math.pow (field_y - way_start_y, 2)));
+
+                            /* Prüfen, ob der Weg für den Roboter breit genug ist */
+                            if (way_length >= ROBOT_SIZE / FIELD_SIZE) {
+                                /* Durchschnittlichen Winkel für Wegesrichtung zurückgeben */
+                                return ((way_start_direction + direction) / 2 - (Math.PI / 2));
+                            } else {
+                                /* Weg verwerfen und weitersuchen */
+                                way_started = false;
+                            }
+                        }
+                    } else {
+                        /* Könnte hier ein Weg beginnen? */
+                        if (is_free) {
+                            /* Informationen über den Startpunkt setzen */
+                            way_start_x = field_x;
+                            way_start_y = field_y;
+                            way_start_direction = direction;
+
+                            /* Ein Weg hat begonnen, nach dem Ende suchen */
+                            way_started = true;
+                        }
+                    }
+                }
+
+                /* Wurde ein Weg noch nicht beendet? (Könnte z.B. auftreten, wenn der Roboter im Freien steht) */
+                if (way_started) {
+                    /* Der Weg ist zuende, Wegesbreite (bzw. Länge des Einganges) bestimmen */
+                    int way_length = (int)(Math.sqrt (Math.pow (field_x - way_start_x, 2) + Math.pow (field_y - way_start_y, 2)));
+
+                    /* Prüfen, ob der Weg für den Roboter breit genug ist */
+                    if (way_length >= ROBOT_SIZE / FIELD_SIZE) {
+                        /* Durchschnittlichen Winkel für Wegesrichtung zurückgeben */
+                        return ((way_start_direction + direction) / 2 - (Math.PI / 2));
+                    } else {
+                        /* Weg verwerfen und weitersuchen */
+                        way_started = false;
+                    }
+                }
+            }
+
+            /* Ist dies der erste Versuch? */
+            if (!allow_revisiting) {
+                /* Einschränkungen entschärfen und auch besuchte Felder einbeziehen */
+                return get_first_free_way (position_x, position_y, true);
+            }
+
+            /* Keinen Weg gefunden, festgefahren */
+            return null;
         }
     }
 
@@ -194,6 +283,9 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
     /* Die maximale erlaubte Abweichung der errechneten Schrittrichtung zur erwarteten */
     private static const int MAX_STEP_LENGTH_INACCURACY = 10;
+
+    /* Der maximale erlaubte Winkelunterschied zur Wegesrichtung bis eine Drehung durchgeführt wird */
+    private static const double MAX_TURNING_DIRECTION_DIFFERENCE = (Math.PI / 180) * 10;
 
     /* Konvertiert Grad in Bogemmaß */
     private static double deg_to_rad (uint8 degree) {
@@ -622,6 +714,12 @@ public class Simulator.Backend.MappingAlgorithm : Object {
     /* Speichert die Distanzwerte des momentanen Scanvorganges */
     private Gee.TreeMap<double? , uint16> current_scan;
 
+    /* Geschätze Roboterrichtung nach der Drehung */
+    private double expected_step_direction = 0;
+
+    /* Geschätzte Länge der Roboterfortbewegung */
+    private int expected_step_length = 0;
+
     /* Wird ausgelöst, wenn die Umgebungskarte aktualisiert wurde */
     public signal void map_changed (Map map);
 
@@ -666,13 +764,6 @@ public class Simulator.Backend.MappingAlgorithm : Object {
 
         /* Nach vergleichbaren Merkmalen suchen */
         Mark[] comparable_marks = search_comparable_marks (marks);
-
-        /*
-         * Geschätzte Schrittrichtung und Länge
-         * TODO: Hier die Motoransteuerungswerte einsetzten
-         */
-        double expected_step_direction = robot_direction + -0.12; /* turning-speed: -20 */
-        int expected_step_length = 8; /* motor-speed: 100 */
 
         /* Die Informationen über den zurückgelegten Schritt */
         double step_direction = 0;
@@ -730,17 +821,47 @@ public class Simulator.Backend.MappingAlgorithm : Object {
             map.set_wall_fields (robot_position_x, robot_position_y, robot_direction, wall);
         }
 
+        /* Nächte Bewegungsrichtung mit Backtracking bestimmen */
+        double? next_direction = map.get_first_free_way (robot_position_x, robot_position_y);
+
         /* Aktuelle Roboterposition als "Frei" kennzeichnen */
         map.mark_visited_fields (robot_position_x, robot_position_y);
 
         /* Die Karte wurde aktualisiert */
         map_changed (map);
 
+        /* Differenz der aktuellen Drehung zur Wegesrichtung bestimmen */
+        double direction_difference = (next_direction == null ? 0 : next_direction - robot_direction);
+
+        /* Die Zeit, die für den Bewegungsvorgang benötigt wird */
+        uint movement_time = 0;
+
+        /* Muss die Roboterdrehung korrigiert werden? */
+        if (Math.fabs (direction_difference) > MAX_TURNING_DIRECTION_DIFFERENCE) {
+            /* Länge der Drehung berechnen */
+            movement_time = (uint)(Math.fabs (direction_difference) * 500);
+
+            /* Roboterdrehung korrigieren */
+            turn (100 * (direction_difference >= 0 ? 1 : -1), movement_time);
+
+            expected_step_direction = robot_direction + (0.001 * movement_time * (direction_difference >= 0 ? 1 : -1));
+            expected_step_length = 0;
+        } else {
+            /* Länge der Fortbewegung berechnen */
+            movement_time = 500;
+
+            /* Forwärts fahren */
+            move (100, movement_time);
+
+            expected_step_direction = robot_direction;
+            expected_step_length = 8;
+        }
+
         /* Neue Messreihe beginnen */
         current_scan = new Gee.TreeMap<double? , uint16> ();
 
         /* Neuen Scanvorgang einleiten */
-        Timeout.add (500, () => {
+        Timeout.add (movement_time + 200, () => {
             start_new_scan ();
 
             return false;

@@ -58,9 +58,6 @@ public class Simulator.Backend.Robot : Object {
 
             return true;
         });
-        
-        set_motor_speed (100);
-        set_motor_turning_speed (-20);
     }
 
     public void set_motor_speed (short speed) {
@@ -82,7 +79,7 @@ public class Simulator.Backend.Robot : Object {
             new_speed += (short)Random.int_range (-30, 10);
         }
 
-        turning_speed = ((double)new_speed / 256) / 8;
+        turning_speed = ((double)new_speed / 256) / 16;
     }
 
     public void accelerate_to_motor_speed (short speed) {
