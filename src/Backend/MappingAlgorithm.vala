@@ -664,7 +664,7 @@ public class Simulator.Backend.MappingAlgorithm : Object {
         /* Die Art des Merkmals */
         MarkType type;
 
-        /* Gibt an, ob das übergebende Merkmal in der Nähe liegt */
+        /* Gibt an, ob das übergebene Merkmal in der Nähe liegt */
         public bool is_near (Mark mark, int max_distance_gab = MARK_MAX_DISTANCE_GAP) {
             /* Abstand zwischen den Merkmalen berechnen */
             int distance_gap = (int)(Math.sqrt (Math.pow (position_x - mark.position_x, 2) + Math.pow (position_y - mark.position_y, 2)));
